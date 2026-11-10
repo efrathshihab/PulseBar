@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/PulseBar/PulseBar.csproj" />
+  </Folder>
+</Solution>
