@@ -1,139 +1,163 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using PulseBar.Models;
-using PulseBar.Services;
 using PulseBar.Utilities;
 
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// SystemMonitor এর snapshot থেকে Overview এর দেখানোর লেখা বানায়।
-/// মান না বদলালে নতুন string বানায় না।
+/// AppState এর snapshot থেকে Overview এর gauge আর লেখা বানায়।
+/// Popup লুকানো থাকলে কিছুই update করে না; খুললে সাথে সাথে সর্বশেষ মান বসায়।
 /// </summary>
 public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 {
     private const string NotAvailable = "N/A";
 
-    private readonly SystemMonitor _monitor;
+    private static readonly string SystemDriveRoot =
+        Path.GetPathRoot(Environment.SystemDirectory) ?? @"C:\";
+
+    private readonly AppState _state;
     private readonly Dispatcher _dispatcher;
-
-    private int _lastCpu = int.MinValue;
-    private ulong _lastRamUsedTenths = ulong.MaxValue;
     private IReadOnlyList<DriveUsage>? _lastDrives;
-    private ulong? _lastDown = ulong.MaxValue;
-    private ulong? _lastUp = ulong.MaxValue;
-    private int _lastTemp = int.MinValue;
-    private TemperatureStatus? _lastTempStatus;
 
     [ObservableProperty]
-    public partial string CpuText { get; set; } = $"CPU  {NotAvailable}";
+    public partial double? CpuValue { get; set; }
 
     [ObservableProperty]
-    public partial string RamText { get; set; } = $"RAM  {NotAvailable}";
+    public partial double? RamValue { get; set; }
 
     [ObservableProperty]
-    public partial string NetworkText { get; set; } = $"↓ {NotAvailable}   ↑ {NotAvailable}";
+    public partial string RamSubText { get; set; } = string.Empty;
 
     [ObservableProperty]
-    public partial string TempText { get; set; } = $"CPU Temp  {NotAvailable}";
+    public partial double? DiskValue { get; set; }
+
+    [ObservableProperty]
+    public partial string DiskSubText { get; set; } = string.Empty;
+
+    [ObservableProperty]
+    public partial double? TempValue { get; set; }
 
     /// <summary>Temperature কেন N/A, mouse রাখলে দেখায়। ঠিক থাকলে null।</summary>
     [ObservableProperty]
     public partial string? TempToolTip { get; set; }
 
-    public ObservableCollection<string> DriveLines { get; } = [];
+    [ObservableProperty]
+    public partial string DownloadText { get; set; } = $"↓ {NotAvailable}";
 
-    public OverviewViewModel(SystemMonitor monitor, Dispatcher dispatcher)
+    [ObservableProperty]
+    public partial string UploadText { get; set; } = $"↑ {NotAvailable}";
+
+    /// <summary>System drive ছাড়া বাকি fixed drive গুলো।</summary>
+    public ObservableCollection<DriveItem> OtherDrives { get; } = [];
+
+    public OverviewViewModel(AppState state, Dispatcher dispatcher)
     {
-        _monitor = monitor;
+        _state = state;
         _dispatcher = dispatcher;
-        _monitor.SnapshotUpdated += OnSnapshotUpdated;
+        _state.SnapshotUpdated += OnSnapshotUpdated;
+        _state.PopupVisibilityChanged += OnPopupVisibilityChanged;
+    }
 
-        if (_monitor.Latest is { } latest)
+    public void Dispose()
+    {
+        _state.SnapshotUpdated -= OnSnapshotUpdated;
+        _state.PopupVisibilityChanged -= OnPopupVisibilityChanged;
+    }
+
+    private void OnSnapshotUpdated(object? sender, SystemSnapshot snapshot)
+    {
+        // Popup লুকানো থাকলে UI thread কে জাগানোরও দরকার নেই
+        if (!_state.IsPopupVisible)
+        {
+            return;
+        }
+
+        _dispatcher.BeginInvoke(() =>
+        {
+            if (_state.IsPopupVisible)
+            {
+                Apply(snapshot);
+            }
+        });
+    }
+
+    private void OnPopupVisibilityChanged(object? sender, bool visible)
+    {
+        // UI thread থেকে আসে; popup দেখানোর আগেই সর্বশেষ মান বসে যায়
+        if (visible && _state.Snapshot is { } latest)
         {
             Apply(latest);
         }
     }
 
-    public void Dispose()
-    {
-        _monitor.SnapshotUpdated -= OnSnapshotUpdated;
-    }
-
-    private void OnSnapshotUpdated(object? sender, SystemSnapshot snapshot)
-    {
-        _dispatcher.BeginInvoke(() => Apply(snapshot));
-    }
-
     private void Apply(SystemSnapshot s)
     {
-        // CPU
-        int cpu = s.CpuPercent is { } c ? (int)Math.Round(c) : -1;
-        if (cpu != _lastCpu)
-        {
-            _lastCpu = cpu;
-            CpuText = cpu < 0 ? $"CPU  {NotAvailable}" : $"CPU  {cpu}%";
-        }
+        // পূর্ণ সংখ্যায় রাখা হয়, যাতে একই মানে বারবার animation না হয়
+        CpuValue = Round(s.CpuPercent);
 
-        // RAM: ০.১ GB এর মতো ছোট বদল হলেই নতুন লেখা
-        if (s.RamUsedBytes is { } used && s.RamTotalBytes is { } total && s.RamPercent is { } pct)
-        {
-            ulong key = used / (1024UL * 1024 * 100);
-            if (key != _lastRamUsedTenths)
-            {
-                _lastRamUsedTenths = key;
-                RamText = $"RAM  {ByteFormatter.FormatPair(used, total)} ({Math.Round(pct):0}%)";
-            }
-        }
-        else if (_lastRamUsedTenths != ulong.MaxValue - 1)
-        {
-            _lastRamUsedTenths = ulong.MaxValue - 1;
-            RamText = $"RAM  {NotAvailable}";
-        }
+        RamValue = Round(s.RamPercent);
+        RamSubText = s.RamUsedBytes is { } used && s.RamTotalBytes is { } total
+            ? ByteFormatter.FormatPair(used, total)
+            : NotAvailable;
 
-        // Network
-        if (s.DownloadBytesPerSec != _lastDown || s.UploadBytesPerSec != _lastUp)
+        TempValue = Round(s.CpuTempCelsius);
+        TempToolTip = s.CpuTempCelsius is not null ? null : s.CpuTempStatus switch
         {
-            _lastDown = s.DownloadBytesPerSec;
-            _lastUp = s.UploadBytesPerSec;
-            string down = s.DownloadBytesPerSec is { } d ? ByteFormatter.FormatSpeed(d) : NotAvailable;
-            string up = s.UploadBytesPerSec is { } u ? ByteFormatter.FormatSpeed(u) : NotAvailable;
-            NetworkText = $"↓ {down}   ↑ {up}";
-        }
+            TemperatureStatus.NotAdmin => "Administrator হিসেবে চালাতে হবে",
+            TemperatureStatus.NoDriver => "PawnIO driver install করা নেই",
+            TemperatureStatus.NoSensor => "CPU temperature sensor পাওয়া যায়নি",
+            _ => null,
+        };
 
-        // CPU temperature
-        int temp = s.CpuTempCelsius is { } t ? (int)Math.Round(t) : int.MinValue + 1;
-        if (temp != _lastTemp || s.CpuTempStatus != _lastTempStatus)
-        {
-            _lastTemp = temp;
-            _lastTempStatus = s.CpuTempStatus;
-            TempText = s.CpuTempCelsius is null ? $"CPU Temp  {NotAvailable}" : $"CPU Temp  {temp} °C";
-            TempToolTip = s.CpuTempCelsius is not null ? null : s.CpuTempStatus switch
-            {
-                TemperatureStatus.NotAdmin => "Administrator হিসেবে চালাতে হবে",
-                TemperatureStatus.NoDriver => "PawnIO driver install করা নেই",
-                TemperatureStatus.NoSensor => "CPU temperature sensor পাওয়া যায়নি",
-                _ => null,
-            };
-        }
+        DownloadText = "↓ " + (s.DownloadBytesPerSec is { } d ? ByteFormatter.FormatSpeed(d) : NotAvailable);
+        UploadText = "↑ " + (s.UploadBytesPerSec is { } u ? ByteFormatter.FormatSpeed(u) : NotAvailable);
 
         // Drive: monitor শুধু ১০ সেকেন্ডে একবার নতুন list দেয়
         if (!ReferenceEquals(s.Drives, _lastDrives))
         {
             _lastDrives = s.Drives;
-            DriveLines.Clear();
-
-            if (s.Drives.Count == 0)
-            {
-                DriveLines.Add($"Drive  {NotAvailable}");
-            }
-
-            foreach (var d in s.Drives)
-            {
-                string name = d.Name.TrimEnd('\\');
-                DriveLines.Add($"{name}  {ByteFormatter.FormatPair(d.UsedBytes, d.TotalBytes)} ({Math.Round(d.Percent):0}%)");
-            }
+            ApplyDrives(s.Drives);
         }
     }
+
+    private void ApplyDrives(IReadOnlyList<DriveUsage> drives)
+    {
+        DriveUsage? system = null;
+        OtherDrives.Clear();
+
+        foreach (var drive in drives)
+        {
+            if (system is null && string.Equals(drive.Name, SystemDriveRoot, StringComparison.OrdinalIgnoreCase))
+            {
+                system = drive;
+                continue;
+            }
+
+            OtherDrives.Add(new DriveItem(
+                DriveName(drive),
+                $"{ByteFormatter.FormatPair(drive.UsedBytes, drive.TotalBytes)} ({Math.Round(drive.Percent):0}%)",
+                drive.Percent));
+        }
+
+        if (system is not null)
+        {
+            DiskValue = Math.Round(system.Percent);
+            DiskSubText = $"{DriveName(system)}  {ByteFormatter.FormatPair(system.UsedBytes, system.TotalBytes)}";
+        }
+        else
+        {
+            DiskValue = null;
+            DiskSubText = NotAvailable;
+        }
+    }
+
+    private static string DriveName(DriveUsage drive) => drive.Name.TrimEnd('\\');
+
+    private static double? Round(double? value) => value is { } v ? Math.Round(v) : null;
 }
+
+/// <summary>Overview এর নিচের drive list এর একটা সারি।</summary>
+public sealed record DriveItem(string Name, string UsageText, double Percent);

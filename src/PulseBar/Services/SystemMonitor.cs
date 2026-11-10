@@ -7,7 +7,7 @@ namespace PulseBar.Services;
 /// <summary>
 /// Background এ প্রতি ১ সেকেন্ডে CPU, RAM আর network, প্রতি ১০ সেকেন্ডে drive পড়ে
 /// (temperature আলাদা <see cref="TemperatureMonitor"/> থেকে, প্রতি ২ সেকেন্ডে)
-/// <see cref="SnapshotUpdated"/> event দিয়ে পাঠায়। Event background thread থেকে আসে।
+/// সরাসরি <see cref="AppState"/> এ লেখে (background thread থেকে)।
 /// </summary>
 public sealed class SystemMonitor : IDisposable
 {
@@ -28,10 +28,12 @@ public sealed class SystemMonitor : IDisposable
     private readonly NetworkMonitor _network = new();
     private readonly TemperatureMonitor _temperature = new();
 
-    public event EventHandler<SystemSnapshot>? SnapshotUpdated;
+    private readonly AppState _state;
 
-    /// <summary>সবশেষ snapshot, এখনো না নেওয়া হলে null।</summary>
-    public SystemSnapshot? Latest { get; private set; }
+    public SystemMonitor(AppState state)
+    {
+        _state = state;
+    }
 
     public void Start()
     {
@@ -129,16 +131,7 @@ public sealed class SystemMonitor : IDisposable
             download, upload,
             _temperature.CurrentCelsius, _temperature.Status,
             now);
-        Latest = snapshot;
-
-        try
-        {
-            SnapshotUpdated?.Invoke(this, snapshot);
-        }
-        catch
-        {
-            // কোনো subscriber এর ভুলে monitor loop থামবে না
-        }
+        _state.UpdateSnapshot(snapshot);
     }
 
     private double? ReadCpuPercent()

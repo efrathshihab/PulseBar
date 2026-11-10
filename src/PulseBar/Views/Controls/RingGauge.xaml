@@ -1,0 +1,39 @@
+<UserControl x:Class="PulseBar.Views.Controls.RingGauge"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Background="Transparent">
+    <StackPanel HorizontalAlignment="Center">
+        <Grid Width="104" Height="104">
+            <!-- পেছনের track -->
+            <Ellipse x:Name="Track"
+                     StrokeThickness="8"
+                     Stroke="{DynamicResource ControlStrongFillColorDisabledBrush}"
+                     Opacity="0.35" />
+
+            <!-- মান অনুযায়ী arc -->
+            <Path x:Name="Arc"
+                  StrokeThickness="8"
+                  StrokeStartLineCap="Round"
+                  StrokeEndLineCap="Round" />
+
+            <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="ValueText"
+                           HorizontalAlignment="Center"
+                           FontSize="22"
+                           FontWeight="SemiBold"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                <TextBlock x:Name="LabelText"
+                           HorizontalAlignment="Center"
+                           FontSize="12"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+            </StackPanel>
+        </Grid>
+
+        <TextBlock x:Name="SubTextBlock"
+                   Margin="0,6,0,0"
+                   HorizontalAlignment="Center"
+                   FontSize="12"
+                   TextTrimming="CharacterEllipsis"
+                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+    </StackPanel>
+</UserControl>
