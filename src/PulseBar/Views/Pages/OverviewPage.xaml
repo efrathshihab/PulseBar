@@ -14,6 +14,14 @@
         <ui:TextBlock Text="{Binding RamText}"
                       FontTypography="BodyStrong"
                       Margin="0,0,0,8" />
+        <ui:TextBlock Text="{Binding NetworkText}"
+                      FontTypography="BodyStrong"
+                      Margin="0,0,0,8" />
+        <ui:TextBlock Text="{Binding TempText}"
+                      ToolTip="{Binding TempToolTip}"
+                      Background="Transparent"
+                      FontTypography="BodyStrong"
+                      Margin="0,0,0,8" />
         <ItemsControl ItemsSource="{Binding DriveLines}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate>

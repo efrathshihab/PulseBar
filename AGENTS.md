@@ -41,6 +41,7 @@ PulseBar/
 - Namespace: PulseBar
 - প্রতিটা Service আলাদা class হবে, UI থেকে আলাদা থাকবে (MVVM ধাঁচে)
 - Admin permission না পেলে বা কোনো sensor কাজ না করলে app crash করবে না, "N/A" দেখাবে
+- CPU temperature (LibreHardwareMonitorLib) এর জন্য admin + PawnIO driver দুটোই লাগে; না থাকলে শুরুতে একবার চেষ্টা করে থামবে, "N/A" আর tooltip এ কারণ দেখাবে। app.manifest এ requireAdministrator দেবে না
 - নিজের app যেন খুব কম CPU/RAM খায়
 - একবারে শুধু আজকের task এর কাজ করবে, বাড়তি feature যোগ করবে না
 - কাজ শেষে বলবে কোন command দিয়ে চালাতে হবে আর কী কী test করতে হবে

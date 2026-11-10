@@ -21,12 +21,26 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     private int _lastCpu = int.MinValue;
     private ulong _lastRamUsedTenths = ulong.MaxValue;
     private IReadOnlyList<DriveUsage>? _lastDrives;
+    private ulong? _lastDown = ulong.MaxValue;
+    private ulong? _lastUp = ulong.MaxValue;
+    private int _lastTemp = int.MinValue;
+    private TemperatureStatus? _lastTempStatus;
 
     [ObservableProperty]
     public partial string CpuText { get; set; } = $"CPU  {NotAvailable}";
 
     [ObservableProperty]
     public partial string RamText { get; set; } = $"RAM  {NotAvailable}";
+
+    [ObservableProperty]
+    public partial string NetworkText { get; set; } = $"↓ {NotAvailable}   ↑ {NotAvailable}";
+
+    [ObservableProperty]
+    public partial string TempText { get; set; } = $"CPU Temp  {NotAvailable}";
+
+    /// <summary>Temperature কেন N/A, mouse রাখলে দেখায়। ঠিক থাকলে null।</summary>
+    [ObservableProperty]
+    public partial string? TempToolTip { get; set; }
 
     public ObservableCollection<string> DriveLines { get; } = [];
 
@@ -76,6 +90,32 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
         {
             _lastRamUsedTenths = ulong.MaxValue - 1;
             RamText = $"RAM  {NotAvailable}";
+        }
+
+        // Network
+        if (s.DownloadBytesPerSec != _lastDown || s.UploadBytesPerSec != _lastUp)
+        {
+            _lastDown = s.DownloadBytesPerSec;
+            _lastUp = s.UploadBytesPerSec;
+            string down = s.DownloadBytesPerSec is { } d ? ByteFormatter.FormatSpeed(d) : NotAvailable;
+            string up = s.UploadBytesPerSec is { } u ? ByteFormatter.FormatSpeed(u) : NotAvailable;
+            NetworkText = $"↓ {down}   ↑ {up}";
+        }
+
+        // CPU temperature
+        int temp = s.CpuTempCelsius is { } t ? (int)Math.Round(t) : int.MinValue + 1;
+        if (temp != _lastTemp || s.CpuTempStatus != _lastTempStatus)
+        {
+            _lastTemp = temp;
+            _lastTempStatus = s.CpuTempStatus;
+            TempText = s.CpuTempCelsius is null ? $"CPU Temp  {NotAvailable}" : $"CPU Temp  {temp} °C";
+            TempToolTip = s.CpuTempCelsius is not null ? null : s.CpuTempStatus switch
+            {
+                TemperatureStatus.NotAdmin => "Administrator হিসেবে চালাতে হবে",
+                TemperatureStatus.NoDriver => "PawnIO driver install করা নেই",
+                TemperatureStatus.NoSensor => "CPU temperature sensor পাওয়া যায়নি",
+                _ => null,
+            };
         }
 
         // Drive: monitor শুধু ১০ সেকেন্ডে একবার নতুন list দেয়
