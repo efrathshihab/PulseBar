@@ -9,6 +9,10 @@ public sealed record SystemSnapshot(
     ulong? RamTotalBytes,
     double? RamPercent,
     IReadOnlyList<DriveUsage> Drives,
+    ulong? DownloadBytesPerSec,
+    ulong? UploadBytesPerSec,
+    double? CpuTempCelsius,
+    TemperatureStatus CpuTempStatus,
     DateTime Timestamp);
 
 /// <summary>একটা fixed drive এর ব্যবহার। Name যেমন "C:\"।</summary>
@@ -18,3 +22,13 @@ public sealed record DriveUsage(
     ulong UsedBytes,
     ulong TotalBytes,
     double Percent);
+
+/// <summary>CPU temperature কেন পাওয়া গেল বা গেল না।</summary>
+public enum TemperatureStatus
+{
+    Starting,
+    Ok,
+    NotAdmin,
+    NoDriver,
+    NoSensor,
+}

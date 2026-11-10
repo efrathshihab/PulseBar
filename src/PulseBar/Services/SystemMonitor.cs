@@ -5,7 +5,8 @@ using PulseBar.Models;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Background এ প্রতি ১ সেকেন্ডে CPU আর RAM, প্রতি ১০ সেকেন্ডে drive পড়ে
+/// Background এ প্রতি ১ সেকেন্ডে CPU, RAM আর network, প্রতি ১০ সেকেন্ডে drive পড়ে
+/// (temperature আলাদা <see cref="TemperatureMonitor"/> থেকে, প্রতি ২ সেকেন্ডে)
 /// <see cref="SnapshotUpdated"/> event দিয়ে পাঠায়। Event background thread থেকে আসে।
 /// </summary>
 public sealed class SystemMonitor : IDisposable
@@ -24,6 +25,9 @@ public sealed class SystemMonitor : IDisposable
     private IReadOnlyList<DriveUsage> _drives = [];
     private DateTime _lastDriveRead = DateTime.MinValue;
 
+    private readonly NetworkMonitor _network = new();
+    private readonly TemperatureMonitor _temperature = new();
+
     public event EventHandler<SystemSnapshot>? SnapshotUpdated;
 
     /// <summary>সবশেষ snapshot, এখনো না নেওয়া হলে null।</summary>
@@ -41,6 +45,7 @@ public sealed class SystemMonitor : IDisposable
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
             _loop = Task.Run(() => RunAsync(token), token);
+            _temperature.Start();
         }
     }
 
@@ -72,12 +77,18 @@ public sealed class SystemMonitor : IDisposable
         _cts = null;
     }
 
-    public void Dispose() => Stop();
+    public void Dispose()
+    {
+        Stop();
+        _temperature.Dispose(); // ভেতরে Computer.Close()
+        _network.Dispose();
+    }
 
     private async Task RunAsync(CancellationToken token)
     {
-        // প্রথম CPU sample এর ভিত্তি; এরপর প্রথম tick থেকেই % পাওয়া যাবে
+        // প্রথম CPU আর network sample এর ভিত্তি; এরপর প্রথম tick থেকেই মান পাওয়া যাবে
         ReadCpuPercent();
+        _network.TryRead(out _, out _);
 
         using var timer = new PeriodicTimer(SampleInterval);
         try
@@ -105,7 +116,19 @@ public sealed class SystemMonitor : IDisposable
             _lastDriveRead = now;
         }
 
-        var snapshot = new SystemSnapshot(cpu, used, total, ramPercent, _drives, now);
+        ulong? download = null;
+        ulong? upload = null;
+        if (_network.TryRead(out var down, out var up))
+        {
+            download = down;
+            upload = up;
+        }
+
+        var snapshot = new SystemSnapshot(
+            cpu, used, total, ramPercent, _drives,
+            download, upload,
+            _temperature.CurrentCelsius, _temperature.Status,
+            now);
         Latest = snapshot;
 
         try

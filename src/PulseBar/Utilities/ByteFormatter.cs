@@ -16,6 +16,9 @@ public static class ByteFormatter
         return $"{FormatNumber(bytes, unit)} {Units[unit]}";
     }
 
+    /// <summary>Speed, যেমন "850 KB/s", "12.4 MB/s"।</summary>
+    public static string FormatSpeed(ulong bytesPerSec) => $"{Format(bytesPerSec)}/s";
+
     /// <summary>দুটো মান total এর একক দিয়ে: যেমন "7.2 / 15.8 GB"।</summary>
     public static string FormatPair(ulong used, ulong total)
     {
