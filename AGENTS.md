@@ -12,7 +12,7 @@ C#, .NET 10, WPF
 
 ## Features (v1.0)
 - Tray icon এ click করলে tray এর পাশে Fluent popup খুলবে, ৪টা tab: Overview, Sound, Clipboard, Settings
-- Overview: live CPU, RAM, SSD, CPU temp, network up/down, প্রতি ১ সেকেন্ডে update
+- Overview: live CPU, GPU (usage, VRAM, temp), RAM, SSD, CPU temp, network up/down, প্রতি ১ সেকেন্ডে update
 - Sound: per-app volume/mute (WASAPI audio sessions), output device switch, master volume
 - Clipboard: text + image history, All/Text/Images filter, search, copy/delete, 24h retention,
   Ctrl+Shift+V global hotkey দিয়ে আলাদা panel (Enter = copy, Esc = বন্ধ)

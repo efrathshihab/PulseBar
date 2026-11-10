@@ -26,6 +26,20 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     public partial double? CpuValue { get; set; }
 
     [ObservableProperty]
+    public partial double? GpuValue { get; set; }
+
+    /// <summary>যেমন "2.1 / 6 GB"।</summary>
+    [ObservableProperty]
+    public partial string GpuSubText { get; set; } = string.Empty;
+
+    /// <summary>GPU gauge এর tooltip এ GPU এর নাম।</summary>
+    [ObservableProperty]
+    public partial string? GpuName { get; set; }
+
+    [ObservableProperty]
+    public partial double? GpuTempValue { get; set; }
+
+    [ObservableProperty]
     public partial double? RamValue { get; set; }
 
     [ObservableProperty]
@@ -102,6 +116,13 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
         RamSubText = s.RamUsedBytes is { } used && s.RamTotalBytes is { } total
             ? ByteFormatter.FormatPair(used, total)
             : NotAvailable;
+
+        GpuValue = Round(s.GpuPercent);
+        GpuName = s.GpuName;
+        GpuSubText = s.VramUsedBytes is { } vramUsed && s.VramTotalBytes is { } vramTotal && vramTotal > 0
+            ? ByteFormatter.FormatPair(vramUsed, vramTotal)
+            : NotAvailable;
+        GpuTempValue = Round(s.GpuTempCelsius);
 
         TempValue = Round(s.CpuTempCelsius);
         TempToolTip = s.CpuTempCelsius is not null ? null : s.CpuTempStatus switch

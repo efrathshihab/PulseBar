@@ -11,26 +11,38 @@
              d:DataContext="{d:DesignInstance Type=vm:OverviewViewModel}">
     <StackPanel Margin="4,12,4,4">
 
-        <!-- 2x2 gauge -->
-        <UniformGrid Columns="2" Rows="2">
-            <controls:RingGauge Margin="0,0,0,14"
-                                Label="CPU"
+        <!-- 3x2 gauge: উপরে CPU, GPU, RAM; নিচে Disk, CPU Temp, GPU Temp -->
+        <UniformGrid Columns="3" Rows="2">
+            <UniformGrid.Resources>
+                <Style TargetType="controls:RingGauge">
+                    <Setter Property="Diameter" Value="84" />
+                    <Setter Property="Margin" Value="0,0,0,12" />
+                </Style>
+            </UniformGrid.Resources>
+
+            <controls:RingGauge Label="CPU"
                                 Value="{Binding CpuValue}" />
-            <controls:RingGauge Margin="0,0,0,14"
-                                Label="RAM"
+            <controls:RingGauge Label="GPU"
+                                Value="{Binding GpuValue}"
+                                SubText="{Binding GpuSubText}"
+                                ToolTip="{Binding GpuName}" />
+            <controls:RingGauge Label="RAM"
                                 Value="{Binding RamValue}"
                                 SubText="{Binding RamSubText}" />
-            <controls:RingGauge Margin="0,0,0,14"
-                                Label="Disk"
+            <controls:RingGauge Label="Disk"
                                 Value="{Binding DiskValue}"
                                 SubText="{Binding DiskSubText}" />
-            <controls:RingGauge Margin="0,0,0,14"
-                                Label="CPU Temp"
+            <controls:RingGauge Label="CPU Temp"
                                 Unit="°C"
                                 WarningThreshold="{x:Static util:UsageLevels.TempWarning}"
                                 CriticalThreshold="{x:Static util:UsageLevels.TempCritical}"
                                 Value="{Binding TempValue}"
                                 ToolTip="{Binding TempToolTip}" />
+            <controls:RingGauge Label="GPU Temp"
+                                Unit="°C"
+                                WarningThreshold="{x:Static util:UsageLevels.GpuTempWarning}"
+                                CriticalThreshold="{x:Static util:UsageLevels.GpuTempCritical}"
+                                Value="{Binding GpuTempValue}" />
         </UniformGrid>
 
         <!-- Network -->

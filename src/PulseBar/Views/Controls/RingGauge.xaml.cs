@@ -14,8 +14,6 @@ namespace PulseBar.Views.Controls;
 /// </summary>
 public partial class RingGauge : UserControl
 {
-    private const double RingSize = 104;
-    private const double RingThickness = 8;
 
     private static readonly Duration AnimationDuration = new(TimeSpan.FromMilliseconds(250));
     private static readonly IEasingFunction Easing = CreateEasing();
@@ -47,6 +45,11 @@ public partial class RingGauge : UserControl
         nameof(CriticalThreshold), typeof(double), typeof(RingGauge),
         new PropertyMetadata(UsageLevels.UsageCritical, (d, _) => ((RingGauge)d).OnValueChanged()));
 
+    /// <summary>Ring এর ব্যাস (DIP); stroke আর লেখার মাপ এর সাথে মিলিয়ে বদলায়।</summary>
+    public static readonly DependencyProperty DiameterProperty = DependencyProperty.Register(
+        nameof(Diameter), typeof(double), typeof(RingGauge),
+        new PropertyMetadata(104.0, (d, _) => ((RingGauge)d).ApplyDiameter()));
+
     /// <summary>Ring এ এখন যতটা আঁকা আছে (animation এর জন্য)।</summary>
     private static readonly DependencyProperty DisplayValueProperty = DependencyProperty.Register(
         "DisplayValue", typeof(double), typeof(RingGauge),
@@ -55,7 +58,28 @@ public partial class RingGauge : UserControl
     public RingGauge()
     {
         InitializeComponent();
+        ApplyDiameter();
         OnValueChanged();
+    }
+
+    public double Diameter
+    {
+        get => (double)GetValue(DiameterProperty);
+        set => SetValue(DiameterProperty, value);
+    }
+
+    private double Thickness => Math.Max(4, Math.Round(Diameter * 0.077));
+
+    private void ApplyDiameter()
+    {
+        double d = Diameter;
+        RingHost.Width = d;
+        RingHost.Height = d;
+        Track.StrokeThickness = Thickness;
+        Arc.StrokeThickness = Thickness;
+        ValueText.FontSize = Math.Round(d * 0.21);
+        LabelText.FontSize = Math.Max(10, Math.Round(d * 0.12));
+        DrawArc((double)GetValue(DisplayValueProperty));
     }
 
     public double? Value
@@ -164,8 +188,8 @@ public partial class RingGauge : UserControl
             return;
         }
 
-        double center = RingSize / 2;
-        double radius = center - RingThickness / 2;
+        double center = Diameter / 2;
+        double radius = center - Thickness / 2;
 
         Geometry geometry;
         if (fraction >= 0.9999)
