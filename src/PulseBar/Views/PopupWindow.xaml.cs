@@ -1,7 +1,9 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using PulseBar.Models;
 using PulseBar.Utilities;
 using PulseBar.ViewModels;
 using Wpf.Ui.Controls;
@@ -25,6 +27,24 @@ public partial class PopupWindow : FluentWindow
         InitializeComponent();
         OverviewTab.DataContext = overview;
         Deactivated += (_, _) => HidePopup();
+        Tabs.SizeChanged += (_, _) => SpreadTabs();
+    }
+
+    /// <summary>৪টা tab কে পুরো চওড়ায় সমানভাবে ছড়ায়।</summary>
+    private void SpreadTabs()
+    {
+        int count = Tabs.Items.Count;
+        if (count == 0 || Tabs.ActualWidth <= 0)
+        {
+            return;
+        }
+
+        // TabItem এর নিজস্ব margin বাদ দিয়ে, rounding এর জন্য ১px কম, যাতে দ্বিতীয় সারিতে না যায়
+        foreach (TabItem tab in Tabs.Items)
+        {
+            double margin = tab.Margin.Left + tab.Margin.Right;
+            tab.Width = Math.Max(0, Math.Floor(Tabs.ActualWidth / count - margin) - 1);
+        }
     }
 
     public void Toggle()
@@ -52,6 +72,9 @@ public partial class PopupWindow : FluentWindow
             Top = -10000;
         }
 
+        // Show এর আগে, যাতে ViewModel সর্বশেষ মান আগেই বসাতে পারে
+        AppState.Current.IsPopupVisible = true;
+
         Show();
         var hwnd = new WindowInteropHelper(this).Handle;
         PopupPlacement.PlaceNearTray(hwnd, Width, Height);
@@ -68,6 +91,7 @@ public partial class PopupWindow : FluentWindow
         }
 
         Hide();
+        AppState.Current.IsPopupVisible = false;
         _lastHiddenAt = Environment.TickCount64;
     }
 

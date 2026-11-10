@@ -6,6 +6,8 @@
                  Title="PulseBar"
                  Width="380"
                  Height="560"
+                 MinWidth="0"
+                 MinHeight="0"
                  ResizeMode="NoResize"
                  ShowInTaskbar="False"
                  Topmost="True"
@@ -20,44 +22,60 @@
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TextBlock Grid.Row="0"
-                      Text="PulseBar"
-                      FontTypography="Subtitle"
-                      Margin="4,0,0,8" />
+        <StackPanel Grid.Row="0"
+                    Orientation="Horizontal"
+                    Margin="4,0,0,8">
+            <Border Width="22"
+                    Height="22"
+                    CornerRadius="5"
+                    Background="#7C5CFF"
+                    VerticalAlignment="Center"
+                    Margin="0,0,8,0">
+                <TextBlock Text="P"
+                           Foreground="White"
+                           FontWeight="Bold"
+                           FontSize="13"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center" />
+            </Border>
+            <ui:TextBlock Text="PulseBar"
+                          FontTypography="Subtitle"
+                          VerticalAlignment="Center" />
+        </StackPanel>
 
-        <TabControl Grid.Row="1">
+        <TabControl x:Name="Tabs" Grid.Row="1">
             <TabItem>
                 <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Gauge24" Margin="0,0,4,0" />
-                        <TextBlock Text="Overview" />
+                    <StackPanel HorizontalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Gauge24" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                        <TextBlock Text="Overview" FontSize="12" HorizontalAlignment="Center" />
                     </StackPanel>
                 </TabItem.Header>
                 <pages:OverviewPage x:Name="OverviewTab" />
             </TabItem>
             <TabItem>
                 <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Speaker224" Margin="0,0,4,0" />
-                        <TextBlock Text="Sound" />
+                    <StackPanel HorizontalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Speaker224" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                        <TextBlock Text="Sound" FontSize="12" HorizontalAlignment="Center" />
                     </StackPanel>
                 </TabItem.Header>
                 <pages:SoundPage />
             </TabItem>
             <TabItem>
                 <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Clipboard24" Margin="0,0,4,0" />
-                        <TextBlock Text="Clipboard" />
+                    <StackPanel HorizontalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Clipboard24" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                        <TextBlock Text="Clipboard" FontSize="12" HorizontalAlignment="Center" />
                     </StackPanel>
                 </TabItem.Header>
                 <pages:ClipboardPage />
             </TabItem>
             <TabItem>
                 <TabItem.Header>
-                    <StackPanel Orientation="Horizontal">
-                        <ui:SymbolIcon Symbol="Settings24" Margin="0,0,4,0" />
-                        <TextBlock Text="Settings" />
+                    <StackPanel HorizontalAlignment="Center">
+                        <ui:SymbolIcon Symbol="Settings24" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                        <TextBlock Text="Settings" FontSize="12" HorizontalAlignment="Center" />
                     </StackPanel>
                 </TabItem.Header>
                 <pages:SettingsPage />

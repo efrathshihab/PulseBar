@@ -5,29 +5,71 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:vm="clr-namespace:PulseBar.ViewModels"
+             xmlns:controls="clr-namespace:PulseBar.Views.Controls"
+             xmlns:util="clr-namespace:PulseBar.Utilities"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:OverviewViewModel}">
-    <StackPanel Margin="8,12,8,8">
-        <ui:TextBlock Text="{Binding CpuText}"
-                      FontTypography="BodyStrong"
-                      Margin="0,0,0,8" />
-        <ui:TextBlock Text="{Binding RamText}"
-                      FontTypography="BodyStrong"
-                      Margin="0,0,0,8" />
-        <ui:TextBlock Text="{Binding NetworkText}"
-                      FontTypography="BodyStrong"
-                      Margin="0,0,0,8" />
-        <ui:TextBlock Text="{Binding TempText}"
-                      ToolTip="{Binding TempToolTip}"
-                      Background="Transparent"
-                      FontTypography="BodyStrong"
-                      Margin="0,0,0,8" />
-        <ItemsControl ItemsSource="{Binding DriveLines}">
+    <StackPanel Margin="4,12,4,4">
+
+        <!-- 2x2 gauge -->
+        <UniformGrid Columns="2" Rows="2">
+            <controls:RingGauge Margin="0,0,0,14"
+                                Label="CPU"
+                                Value="{Binding CpuValue}" />
+            <controls:RingGauge Margin="0,0,0,14"
+                                Label="RAM"
+                                Value="{Binding RamValue}"
+                                SubText="{Binding RamSubText}" />
+            <controls:RingGauge Margin="0,0,0,14"
+                                Label="Disk"
+                                Value="{Binding DiskValue}"
+                                SubText="{Binding DiskSubText}" />
+            <controls:RingGauge Margin="0,0,0,14"
+                                Label="CPU Temp"
+                                Unit="°C"
+                                WarningThreshold="{x:Static util:UsageLevels.TempWarning}"
+                                CriticalThreshold="{x:Static util:UsageLevels.TempCritical}"
+                                Value="{Binding TempValue}"
+                                ToolTip="{Binding TempToolTip}" />
+        </UniformGrid>
+
+        <!-- Network -->
+        <ui:Card Padding="12,10" Margin="0,0,0,10">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <ui:TextBlock Grid.Column="0"
+                              Text="{Binding DownloadText}"
+                              FontTypography="BodyStrong"
+                              HorizontalAlignment="Center" />
+                <ui:TextBlock Grid.Column="1"
+                              Text="{Binding UploadText}"
+                              FontTypography="BodyStrong"
+                              HorizontalAlignment="Center" />
+            </Grid>
+        </ui:Card>
+
+        <!-- বাকি drive -->
+        <ItemsControl ItemsSource="{Binding OtherDrives}">
             <ItemsControl.ItemTemplate>
-                <DataTemplate>
-                    <ui:TextBlock Text="{Binding}"
-                                  FontTypography="BodyStrong"
-                                  Margin="0,0,0,8" />
+                <DataTemplate DataType="{x:Type vm:DriveItem}">
+                    <StackPanel Margin="4,0,4,10">
+                        <Grid>
+                            <TextBlock Text="{Binding Name}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                            <TextBlock Text="{Binding UsageText}"
+                                       HorizontalAlignment="Right"
+                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                        </Grid>
+                        <ProgressBar Margin="0,6,0,0"
+                                     Height="4"
+                                     MinHeight="4"
+                                     Maximum="100"
+                                     Value="{Binding Percent, Mode=OneWay}" />
+                    </StackPanel>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
