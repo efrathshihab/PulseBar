@@ -44,6 +44,7 @@ PulseBar/
 - CPU temperature (LibreHardwareMonitorLib) এর জন্য admin + PawnIO driver দুটোই লাগে; না থাকলে শুরুতে একবার চেষ্টা করে থামবে, "N/A" আর tooltip এ কারণ দেখাবে। app.manifest এ requireAdministrator দেবে না
 - নিজের app যেন খুব কম CPU/RAM খায়
 - একবারে শুধু আজকের task এর কাজ করবে, বাড়তি feature যোগ করবে না
+- একসাথে একটাই PulseBar চলবে
 - কাজ শেষে বলবে কোন command দিয়ে চালাতে হবে আর কী কী test করতে হবে
 - Commit message এ কোনো Co-Authored-By, Claude-Session বা AI attribution লাইন দেবে না
 

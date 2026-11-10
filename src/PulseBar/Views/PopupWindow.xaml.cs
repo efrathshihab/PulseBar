@@ -44,6 +44,13 @@ public partial class PopupWindow : FluentWindow
         {
             double margin = tab.Margin.Left + tab.Margin.Right;
             tab.Width = Math.Max(0, Math.Floor(Tabs.ActualWidth / count - margin) - 1);
+
+            // WPF-UI এর template এ header এর presenter বাম দিকে বাঁধা থাকে, তাই মাঝখানে আনা হয়
+            tab.ApplyTemplate();
+            if (tab.Template?.FindName("ContentSite", tab) is FrameworkElement site)
+            {
+                site.HorizontalAlignment = HorizontalAlignment.Center;
+            }
         }
     }
 
