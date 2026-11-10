@@ -25,6 +25,7 @@ PulseBar/
 ├─ src/PulseBar/
 │  ├─ App.xaml / App.xaml.cs
 │  ├─ Views/        ← popup, tab গুলো
+│  ├─ ViewModels/   ← প্রতিটা page এর ViewModel (CommunityToolkit.Mvvm)
 │  ├─ Services/     ← SystemMonitor, ClipboardManager, AudioController, HotKeyManager, ScreenshotWatcher, UpdateManager
 │  ├─ Models/       ← AppState, settings
 │  ├─ Utilities/

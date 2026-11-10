@@ -3,6 +3,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Interop;
 using PulseBar.Utilities;
+using PulseBar.ViewModels;
 using Wpf.Ui.Controls;
 
 namespace PulseBar.Views;
@@ -19,9 +20,10 @@ public partial class PopupWindow : FluentWindow
     private long _lastHiddenAt;
     private bool _allowClose;
 
-    public PopupWindow()
+    public PopupWindow(OverviewViewModel overview)
     {
         InitializeComponent();
+        OverviewTab.DataContext = overview;
         Deactivated += (_, _) => HidePopup();
     }
 

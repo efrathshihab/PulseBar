@@ -33,7 +33,7 @@
                         <TextBlock Text="Overview" />
                     </StackPanel>
                 </TabItem.Header>
-                <pages:OverviewPage />
+                <pages:OverviewPage x:Name="OverviewTab" />
             </TabItem>
             <TabItem>
                 <TabItem.Header>
