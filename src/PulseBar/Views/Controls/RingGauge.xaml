@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Background="Transparent">
     <StackPanel HorizontalAlignment="Center">
-        <Grid Width="104" Height="104">
+        <Grid x:Name="RingHost" Width="104" Height="104">
             <!-- পেছনের track -->
             <Ellipse x:Name="Track"
                      StrokeThickness="8"
@@ -30,9 +30,9 @@
         </Grid>
 
         <TextBlock x:Name="SubTextBlock"
-                   Margin="0,6,0,0"
+                   Margin="0,5,0,0"
                    HorizontalAlignment="Center"
-                   FontSize="12"
+                   FontSize="11"
                    TextTrimming="CharacterEllipsis"
                    Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
     </StackPanel>

@@ -75,7 +75,9 @@ public sealed class TrayIconUpdater : IDisposable
             level = UsageLevel.Unknown;
         }
 
-        string toolTip = "PulseBar — CPU " + Percent(s.CpuPercent) + " · RAM " + Percent(s.RamPercent);
+        string toolTip = "PulseBar — CPU " + Percent(s.CpuPercent)
+                       + " · GPU " + Percent(s.GpuPercent)
+                       + " · RAM " + Percent(s.RamPercent);
 
         bool iconChanged = text != _lastText || level != _lastLevel;
         bool toolTipChanged = toolTip != _lastToolTip;

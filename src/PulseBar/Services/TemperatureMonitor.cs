@@ -5,8 +5,9 @@ using PulseBar.Models;
 namespace PulseBar.Services;
 
 /// <summary>
-/// LibreHardwareMonitor দিয়ে CPU temperature পড়ে। Admin আর PawnIO driver লাগে;
-/// না থাকলে শুরুতে একবার চেষ্টা করে থেমে যায় আর <see cref="Status"/> এ কারণ রাখে।
+/// LibreHardwareMonitor দিয়ে CPU আর GPU temperature পড়ে, প্রতি ২ সেকেন্ডে।
+/// CPU এর জন্য admin আর PawnIO driver লাগে; না থাকলে শুরুতে একবার চেষ্টা করে থেমে যায়
+/// আর <see cref="Status"/> এ কারণ রাখে। GPU temp (যেমন NVIDIA) অনেক সময় admin ছাড়াও পাওয়া যায়।
 /// </summary>
 public sealed class TemperatureMonitor : IDisposable
 {
@@ -18,18 +19,17 @@ public sealed class TemperatureMonitor : IDisposable
 
     // double? atomic না, তাই bits হিসেবে রাখা; NaN মানে null
     private long _celsiusBits = BitConverter.DoubleToInt64Bits(double.NaN);
+    private long _gpuCelsiusBits = BitConverter.DoubleToInt64Bits(double.NaN);
     private volatile TemperatureStatus _status = TemperatureStatus.Starting;
 
-    public double? CurrentCelsius
-    {
-        get
-        {
-            double value = BitConverter.Int64BitsToDouble(Interlocked.Read(ref _celsiusBits));
-            return double.IsNaN(value) ? null : value;
-        }
-    }
+    public double? CurrentCelsius => ReadBits(ref _celsiusBits);
+
+    public double? GpuCelsius => ReadBits(ref _gpuCelsiusBits);
 
     public TemperatureStatus Status => _status;
+
+    /// <summary>Main GPU এর নাম (GpuMonitor থেকে); একাধিক GPU থাকলে এটার সাথে মিলিয়ে বাছাই হয়।</summary>
+    public string? PreferredGpuName { get; set; }
 
     public void Start()
     {
@@ -83,54 +83,79 @@ public sealed class TemperatureMonitor : IDisposable
 
         try
         {
-            computer = new Computer { IsCpuEnabled = true };
+            computer = new Computer { IsCpuEnabled = true, IsGpuEnabled = true };
             computer.Open();
 
             var cpu = computer.Hardware.FirstOrDefault(h => h.HardwareType == HardwareType.Cpu);
-            ISensor? sensor = null;
+            var gpu = PickGpu(computer.Hardware, PreferredGpuName);
+            ISensor? cpuSensor = null;
+            ISensor? gpuSensor = null;
 
             if (cpu is not null)
             {
                 Update(cpu);
-                sensor = PickSensor(cpu);
+                cpuSensor = PickSensor(cpu);
             }
 
-            if (ValidValue(sensor) is { } first)
+            if (gpu is not null)
             {
-                Publish(first);
+                Update(gpu);
+                gpuSensor = PickGpuSensor(gpu);
+            }
+
+            // CPU
+            bool cpuActive;
+            if (ValidValue(cpuSensor) is { } firstCpu)
+            {
+                Publish(firstCpu);
+                cpuActive = true;
             }
             else
             {
-                SetCelsius(null);
+                SetBits(ref _celsiusBits, null);
                 _status = !isAdmin ? TemperatureStatus.NotAdmin
                         : !hasDriver ? TemperatureStatus.NoDriver
                         : TemperatureStatus.NoSensor;
 
                 // Admin বা driver না থাকলে বারবার চেষ্টা করে লাভ নেই
-                if (!isAdmin || !hasDriver || cpu is null)
-                {
-                    return;
-                }
+                cpuActive = isAdmin && hasDriver && cpu is not null;
+            }
+
+            // GPU: শুরুতে মান না পেলে আর চেষ্টা নয়
+            bool gpuActive = ValidValue(gpuSensor) is not null;
+            SetBits(ref _gpuCelsiusBits, ValidValue(gpuSensor));
+
+            if (!cpuActive && !gpuActive)
+            {
+                return;
             }
 
             using var timer = new PeriodicTimer(UpdateInterval);
             while (await timer.WaitForNextTickAsync(token).ConfigureAwait(false))
             {
-                Update(cpu!);
-
-                if (ValidValue(sensor) is null)
+                if (cpuActive)
                 {
-                    sensor = PickSensor(cpu!);
+                    Update(cpu!);
+                    if (ValidValue(cpuSensor) is null)
+                    {
+                        cpuSensor = PickSensor(cpu!);
+                    }
+
+                    if (ValidValue(cpuSensor) is { } value)
+                    {
+                        Publish(value);
+                    }
+                    else
+                    {
+                        SetBits(ref _celsiusBits, null);
+                        _status = TemperatureStatus.NoSensor;
+                    }
                 }
 
-                if (ValidValue(sensor) is { } value)
+                if (gpuActive)
                 {
-                    Publish(value);
-                }
-                else
-                {
-                    SetCelsius(null);
-                    _status = TemperatureStatus.NoSensor;
+                    Update(gpu!);
+                    SetBits(ref _gpuCelsiusBits, ValidValue(gpuSensor));
                 }
             }
         }
@@ -140,7 +165,8 @@ public sealed class TemperatureMonitor : IDisposable
         }
         catch
         {
-            SetCelsius(null);
+            SetBits(ref _celsiusBits, null);
+            SetBits(ref _gpuCelsiusBits, null);
             _status = !isAdmin ? TemperatureStatus.NotAdmin
                     : !hasDriver ? TemperatureStatus.NoDriver
                     : TemperatureStatus.NoSensor;
@@ -160,14 +186,68 @@ public sealed class TemperatureMonitor : IDisposable
 
     private void Publish(float value)
     {
-        SetCelsius(value);
+        SetBits(ref _celsiusBits, value);
         _status = TemperatureStatus.Ok;
     }
 
-    private void SetCelsius(double? value)
+    private static double? ReadBits(ref long bits)
     {
-        Interlocked.Exchange(ref _celsiusBits, BitConverter.DoubleToInt64Bits(value ?? double.NaN));
+        double value = BitConverter.Int64BitsToDouble(Interlocked.Read(ref bits));
+        return double.IsNaN(value) ? null : value;
     }
+
+    private static void SetBits(ref long bits, double? value)
+    {
+        Interlocked.Exchange(ref bits, BitConverter.DoubleToInt64Bits(value ?? double.NaN));
+    }
+
+    /// <summary>
+    /// Main GPU এর নামের সাথে মেলে এমন GPU; না পেলে আলাদা (NVIDIA/AMD) GPU, তারপর Intel।
+    /// </summary>
+    private static IHardware? PickGpu(IList<IHardware> hardware, string? preferredName)
+    {
+        IHardware? discrete = null;
+        IHardware? any = null;
+
+        foreach (var h in hardware)
+        {
+            if (h.HardwareType is not (HardwareType.GpuNvidia or HardwareType.GpuAmd or HardwareType.GpuIntel))
+            {
+                continue;
+            }
+
+            if (!string.IsNullOrEmpty(preferredName)
+                && (h.Name.Contains(preferredName, StringComparison.OrdinalIgnoreCase)
+                    || preferredName.Contains(h.Name, StringComparison.OrdinalIgnoreCase)))
+            {
+                return h;
+            }
+
+            any ??= h;
+            if (h.HardwareType != HardwareType.GpuIntel)
+            {
+                discrete ??= h;
+            }
+        }
+
+        return discrete ?? any;
+    }
+
+    /// <summary>GPU এর "GPU Core" temperature sensor।</summary>
+    private static ISensor? PickGpuSensor(IHardware gpu)
+    {
+        foreach (var sensor in AllSensors(gpu))
+        {
+            if (sensor.SensorType == SensorType.Temperature
+                && sensor.Name.Equals("GPU Core", StringComparison.OrdinalIgnoreCase))
+            {
+                return sensor;
+            }
+        }
+
+        return null;
+    }
+
 
     private static void Update(IHardware cpu)
     {

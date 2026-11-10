@@ -13,6 +13,11 @@ public sealed record SystemSnapshot(
     ulong? UploadBytesPerSec,
     double? CpuTempCelsius,
     TemperatureStatus CpuTempStatus,
+    double? GpuPercent,
+    string? GpuName,
+    ulong? VramUsedBytes,
+    ulong? VramTotalBytes,
+    double? GpuTempCelsius,
     DateTime Timestamp);
 
 /// <summary>একটা fixed drive এর ব্যবহার। Name যেমন "C:\"।</summary>

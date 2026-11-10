@@ -21,6 +21,10 @@ public static class UsageLevels
     public const double TempWarning = 70;
     public const double TempCritical = 85;
 
+    // GPU temperature (°C) এর জন্য
+    public const double GpuTempWarning = 75;
+    public const double GpuTempCritical = 88;
+
     /// <summary>Threshold এর রং; বাকি সব রং theme থেকে আসে।</summary>
     public static readonly Color Amber = Color.FromRgb(0xF5, 0x9E, 0x0B);
     public static readonly Color Red = Color.FromRgb(0xE5, 0x48, 0x4D);

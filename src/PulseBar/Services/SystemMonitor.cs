@@ -5,8 +5,8 @@ using PulseBar.Models;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Background এ প্রতি ১ সেকেন্ডে CPU, RAM আর network, প্রতি ১০ সেকেন্ডে drive পড়ে
-/// (temperature আলাদা <see cref="TemperatureMonitor"/> থেকে, প্রতি ২ সেকেন্ডে)
+/// Background এ প্রতি ১ সেকেন্ডে CPU, RAM, network আর GPU, প্রতি ১০ সেকেন্ডে drive পড়ে
+/// (CPU/GPU temperature আলাদা <see cref="TemperatureMonitor"/> থেকে, প্রতি ২ সেকেন্ডে)
 /// সরাসরি <see cref="AppState"/> এ লেখে (background thread থেকে)।
 /// </summary>
 public sealed class SystemMonitor : IDisposable
@@ -27,6 +27,7 @@ public sealed class SystemMonitor : IDisposable
 
     private readonly NetworkMonitor _network = new();
     private readonly TemperatureMonitor _temperature = new();
+    private GpuMonitor? _gpu;
 
     private readonly AppState _state;
 
@@ -47,7 +48,6 @@ public sealed class SystemMonitor : IDisposable
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
             _loop = Task.Run(() => RunAsync(token), token);
-            _temperature.Start();
         }
     }
 
@@ -84,10 +84,19 @@ public sealed class SystemMonitor : IDisposable
         Stop();
         _temperature.Dispose(); // ভেতরে Computer.Close()
         _network.Dispose();
+        _gpu?.Dispose();
+        _gpu = null;
     }
 
     private async Task RunAsync(CancellationToken token)
     {
+        // GPU (DXGI + PDH) চালু করা একটু ধীর, তাই UI thread এ না, এখানে
+        _gpu ??= new GpuMonitor();
+
+        // Main GPU এর নাম জেনে তবেই temperature শুরু, যাতে একাধিক GPU তে ঠিকটা বাছে
+        _temperature.PreferredGpuName = _gpu.Name;
+        _temperature.Start();
+
         // প্রথম CPU আর network sample এর ভিত্তি; এরপর প্রথম tick থেকেই মান পাওয়া যাবে
         ReadCpuPercent();
         _network.TryRead(out _, out _);
@@ -126,10 +135,15 @@ public sealed class SystemMonitor : IDisposable
             upload = up;
         }
 
+        double? gpuPercent = null;
+        ulong? vramUsed = null;
+        _gpu?.Read(out gpuPercent, out vramUsed);
+
         var snapshot = new SystemSnapshot(
             cpu, used, total, ramPercent, _drives,
             download, upload,
             _temperature.CurrentCelsius, _temperature.Status,
+            gpuPercent, _gpu?.Name, vramUsed, _gpu?.TotalVramBytes, _temperature.GpuCelsius,
             now);
         _state.UpdateSnapshot(snapshot);
     }
