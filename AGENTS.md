@@ -43,6 +43,7 @@ PulseBar/
 - নিজের app যেন খুব কম CPU/RAM খায়
 - একবারে শুধু আজকের task এর কাজ করবে, বাড়তি feature যোগ করবে না
 - কাজ শেষে বলবে কোন command দিয়ে চালাতে হবে আর কী কী test করতে হবে
+- Commit message এ কোনো Co-Authored-By, Claude-Session বা AI attribution লাইন দেবে না
 
 ## 15 দিনের plan
 | দিন | কাজ | দিন শেষে যা থাকবে |
