@@ -139,7 +139,8 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
             OtherDrives.Add(new DriveItem(
                 DriveName(drive),
                 $"{ByteFormatter.FormatPair(drive.UsedBytes, drive.TotalBytes)} ({Math.Round(drive.Percent):0}%)",
-                drive.Percent));
+                drive.Percent,
+                UsageLevels.Evaluate(drive.Percent, UsageLevels.UsageWarning, UsageLevels.UsageCritical)));
         }
 
         if (system is not null)
@@ -160,4 +161,4 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 }
 
 /// <summary>Overview এর নিচের drive list এর একটা সারি।</summary>
-public sealed record DriveItem(string Name, string UsageText, double Percent);
+public sealed record DriveItem(string Name, string UsageText, double Percent, UsageLevel Level);

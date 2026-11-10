@@ -64,12 +64,22 @@
                                        HorizontalAlignment="Right"
                                        Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
                         </Grid>
-                        <ProgressBar Margin="0,6,0,0"
+                        <ProgressBar x:Name="Bar"
+                                     Margin="0,6,0,0"
                                      Height="4"
                                      MinHeight="4"
                                      Maximum="100"
                                      Value="{Binding Percent, Mode=OneWay}" />
                     </StackPanel>
+                    <!-- Gauge এর মতোই threshold: 60% এর বেশি amber, 85% এর বেশি লাল -->
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Warning}">
+                            <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.AmberBrush}" />
+                        </DataTrigger>
+                        <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Critical}">
+                            <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.RedBrush}" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>

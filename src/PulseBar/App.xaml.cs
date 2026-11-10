@@ -2,6 +2,7 @@
 using H.NotifyIcon;
 using PulseBar.Models;
 using PulseBar.Services;
+using PulseBar.Utilities;
 using PulseBar.ViewModels;
 using PulseBar.Views;
 using Wpf.Ui.Appearance;
@@ -15,10 +16,19 @@ public partial class App : Application
     private PopupWindow? _popup;
     private SystemMonitor? _systemMonitor;
     private OverviewViewModel? _overviewViewModel;
+    private SingleInstance? _singleInstance;
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // একসাথে একটাই PulseBar; আগে থেকে চললে তার popup খুলে এটা বন্ধ হবে
+        _singleInstance = SingleInstance.TryAcquire();
+        if (_singleInstance is null)
+        {
+            Shutdown();
+            return;
+        }
 
         // Windows এর system theme (Light/Dark) অনুসরণ করবে
         ApplicationThemeManager.ApplySystemTheme();
@@ -29,6 +39,7 @@ public partial class App : Application
         // Popup একবারই বানানো হয়; পরে শুধু Hide/Show
         _popup = new PopupWindow(_overviewViewModel);
         SystemThemeWatcher.Watch(_popup);
+        _singleInstance.ListenForActivation(() => Dispatcher.BeginInvoke(() => _popup.ShowPopup()));
 
         _trayIcon = (TaskbarIcon)FindResource("TrayIcon");
         _trayIcon.TrayLeftMouseUp += (_, _) => _popup.Toggle();
@@ -52,6 +63,7 @@ public partial class App : Application
         _overviewViewModel?.Dispose();
         _popup?.CloseForShutdown();
         _trayIcon?.Dispose();
+        _singleInstance?.Dispose();
         base.OnExit(e);
     }
 }
