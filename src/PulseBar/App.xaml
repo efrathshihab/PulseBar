@@ -24,6 +24,11 @@
                 </tb:TaskbarIcon.IconSource>
                 <tb:TaskbarIcon.ContextMenu>
                     <ContextMenu>
+                        <MenuItem Header="Show on taskbar"
+                                  IsCheckable="True"
+                                  IsChecked="True"
+                                  Click="ShowOnTaskbar_Click" />
+                        <Separator />
                         <MenuItem Header="Quit" Click="Quit_Click" />
                     </ContextMenu>
                 </tb:TaskbarIcon.ContextMenu>

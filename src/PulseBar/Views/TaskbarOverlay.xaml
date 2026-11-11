@@ -1,0 +1,74 @@
+<UserControl x:Class="PulseBar.Views.TaskbarOverlay"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:util="clr-namespace:PulseBar.Utilities"
+             xmlns:vm="clr-namespace:PulseBar.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:TaskbarOverlayViewModel}"
+             FontFamily="Segoe UI"
+             FontSize="11"
+             Focusable="False"
+             UseLayoutRounding="True"
+             SnapsToDevicePixels="True"
+             TextOptions.TextFormattingMode="Display"
+             TextOptions.TextRenderingMode="Grayscale">
+    <UserControl.Resources>
+        <!-- Code থেকে taskbar এর theme অনুযায়ী বদলানো হয় -->
+        <SolidColorBrush x:Key="OverlayLabelBrush" Color="#B3FFFFFF" />
+        <SolidColorBrush x:Key="OverlayValueBrush" Color="#FFFFFFFF" />
+
+        <Style x:Key="OverlayLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource OverlayLabelBrush}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+        </Style>
+
+        <Style x:Key="OverlayValue" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource OverlayValueBrush}" />
+            <Setter Property="HorizontalAlignment" Value="Right" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Typography.NumeralAlignment" Value="Tabular" />
+            <Style.Triggers>
+                <Trigger Property="Tag" Value="{x:Static util:UsageLevel.Warning}">
+                    <Setter Property="Foreground" Value="{x:Static util:UsageLevels.AmberBrush}" />
+                </Trigger>
+                <Trigger Property="Tag" Value="{x:Static util:UsageLevel.Critical}">
+                    <Setter Property="Foreground" Value="{x:Static util:UsageLevels.RedBrush}" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <!-- প্রায় স্বচ্ছ background, যাতে পুরো জায়গায় click ধরা যায় -->
+    <Border Background="#01000000" Padding="4,0">
+        <Grid VerticalAlignment="Center">
+            <!-- নির্দিষ্ট চওড়া, যাতে সংখ্যা বদলালে লেখা না কাঁপে -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="30" />
+                <ColumnDefinition Width="10" />
+                <ColumnDefinition Width="24" />
+                <ColumnDefinition Width="34" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="14" />
+                <RowDefinition Height="14" />
+            </Grid.RowDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="CPU" />
+            <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource OverlayValue}"
+                       Text="{Binding CpuText, Mode=OneWay}" Tag="{Binding CpuLevel, Mode=OneWay}" />
+            <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
+            <TextBlock Grid.Row="0" Grid.Column="4" Style="{StaticResource OverlayValue}"
+                       Text="{Binding GpuText, Mode=OneWay}" Tag="{Binding GpuLevel, Mode=OneWay}" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="RAM" />
+            <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource OverlayValue}"
+                       Text="{Binding RamText, Mode=OneWay}" Tag="{Binding RamLevel, Mode=OneWay}" />
+            <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
+            <TextBlock Grid.Row="1" Grid.Column="4" Style="{StaticResource OverlayValue}"
+                       Text="{Binding GpuTempText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
+        </Grid>
+    </Border>
+</UserControl>

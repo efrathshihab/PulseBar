@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using System.Windows.Controls;
 using H.NotifyIcon;
 using PulseBar.Models;
 using PulseBar.Services;
@@ -13,6 +14,7 @@ public partial class App : Application
 {
     private TaskbarIcon? _trayIcon;
     private TrayIconUpdater? _trayIconUpdater;
+    private TaskbarOverlayHost? _taskbarOverlay;
     private PopupWindow? _popup;
     private SystemMonitor? _systemMonitor;
     private OverviewViewModel? _overviewViewModel;
@@ -46,9 +48,23 @@ public partial class App : Application
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
         _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, Dispatcher);
 
+        // Tray এর ^ arrow এর বাম পাশে taskbar এর উপর live মান; click করলে tray icon এর মতোই popup
+        _taskbarOverlay = new TaskbarOverlayHost(state, Dispatcher);
+        _taskbarOverlay.Clicked += (_, _) => _popup.Toggle();
+        _taskbarOverlay.IsEnabled = true;
+
         // SystemMonitor সবসময় চলবে, কারণ tray icon এ CPU % দেখায়
         _systemMonitor = new SystemMonitor(state);
         _systemMonitor.Start();
+    }
+
+    private void ShowOnTaskbar_Click(object sender, RoutedEventArgs e)
+    {
+        // আপাতত শুধু memory তে; দিন ১২ এর settings এ save হবে
+        if (sender is MenuItem item && _taskbarOverlay is not null)
+        {
+            _taskbarOverlay.IsEnabled = item.IsChecked;
+        }
     }
 
     private void Quit_Click(object sender, RoutedEventArgs e)
@@ -60,6 +76,7 @@ public partial class App : Application
     {
         _systemMonitor?.Dispose();
         _trayIconUpdater?.Dispose();
+        _taskbarOverlay?.Dispose();
         _overviewViewModel?.Dispose();
         _popup?.CloseForShutdown();
         _trayIcon?.Dispose();

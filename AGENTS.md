@@ -18,6 +18,8 @@ C#, .NET 10, WPF
   Ctrl+Shift+V global hotkey দিয়ে আলাদা panel (Enter = copy, Esc = বন্ধ)
 - Screenshot: Win+Shift+S এর ছবি history তে যোগ হবে, Screenshots folder watcher, নিজস্ব area-capture hotkey
 - Settings: System/Light/Dark theme, launch at login, Compact/Balanced mode
+- Taskbar overlay: tray এর ^ arrow এর বাম পাশে taskbar এর উপর 2x2 live মান (CPU, GPU, RAM, GPU temp),
+  threshold অনুযায়ী রং, click করলে popup; tray menu তে "Show on taskbar" দিয়ে চালু/বন্ধ
 
 ## Folder structure
 ```
@@ -66,3 +68,5 @@ PulseBar/
 | ১৩ | Velopack: Setup.exe, auto-update, GitHub Actions release workflow | Auto-update |
 | ১৪ | Fresh PC/VM এ test, bug fix, নিজের CPU/RAM usage চেক | Stable build |
 | ১৫ | Buffer: বাকি কাজ, README, screenshot, v1.0 release | Public release |
+
+> Taskbar overlay দিন ৫ এর পরে বাড়তি যোগ হয়েছে (plan এ ছিল না)। "Show on taskbar" এখন শুধু memory তে থাকে, দিন ১২ এর settings এ save হবে।
