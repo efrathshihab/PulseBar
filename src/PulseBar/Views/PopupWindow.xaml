@@ -69,7 +69,7 @@
                         <TextBlock Text="Clipboard" FontSize="12" HorizontalAlignment="Center" />
                     </StackPanel>
                 </TabItem.Header>
-                <pages:ClipboardPage />
+                <pages:ClipboardPage x:Name="ClipboardTab" />
             </TabItem>
             <TabItem>
                 <TabItem.Header>
