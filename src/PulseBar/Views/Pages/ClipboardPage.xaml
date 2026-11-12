@@ -5,60 +5,261 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:vm="clr-namespace:PulseBar.ViewModels"
-             xmlns:models="clr-namespace:PulseBar.Models"
              xmlns:util="clr-namespace:PulseBar.Utilities"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:ClipboardViewModel}">
     <UserControl.Resources>
         <util:ThumbnailConverter x:Key="ThumbnailConverter" />
+        <util:EnumMatchConverter x:Key="EnumMatchConverter" />
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+
+        <!-- All / Text / Images chip; সব রং theme থেকে -->
+        <Style x:Key="ChipStyle" TargetType="RadioButton">
+            <Setter Property="GroupName" Value="ClipboardFilter" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="Chip"
+                                Padding="12,4"
+                                CornerRadius="12"
+                                BorderThickness="1"
+                                Background="{DynamicResource ControlFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource ControlStrokeColorDefaultBrush}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource ControlFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Chip" Property="Background" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter TargetName="Chip" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- প্রতিটা item এর card -->
+        <Style x:Key="CardStyle" TargetType="ListBoxItem">
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Card"
+                                Margin="0,0,0,6"
+                                Padding="10,8"
+                                CornerRadius="6"
+                                BorderThickness="1"
+                                Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}">
+                            <ContentPresenter />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Card" Property="Background" Value="{DynamicResource CardBackgroundFillColorSecondaryBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Card" Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <DataTemplate x:Key="CardTemplate" DataType="{x:Type vm:ClipboardItemViewModel}">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- Text: সর্বোচ্চ ৩ লাইন, বেশি হলে "…" -->
+                <TextBlock Grid.Row="0"
+                           Margin="0,0,26,0"
+                           Text="{Binding DisplayText}"
+                           Visibility="{Binding IsText, Converter={StaticResource BoolToVisibility}}"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                           FontSize="13"
+                           TextWrapping="Wrap"
+                           TextTrimming="CharacterEllipsis"
+                           LineHeight="18"
+                           LineStackingStrategy="BlockLineHeight"
+                           MaxHeight="54" />
+
+                <!-- Image: thumbnail আর পাশে মাপ -->
+                <StackPanel Grid.Row="0"
+                            Orientation="Horizontal"
+                            Margin="0,0,26,0"
+                            Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
+                    <Border BorderThickness="1"
+                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                        <Image Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailConverter}}"
+                               MaxWidth="120"
+                               MaxHeight="72"
+                               Stretch="Uniform"
+                               RenderOptions.BitmapScalingMode="HighQuality" />
+                    </Border>
+                    <TextBlock Text="{Binding DisplayText}"
+                               Margin="10,0,0,0"
+                               VerticalAlignment="Center"
+                               FontSize="12"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+
+                <Grid Grid.Row="1" Margin="0,6,0,0">
+                    <TextBlock FontSize="11"
+                               TextTrimming="CharacterEllipsis"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                        <Run Text="{Binding AppName, Mode=OneWay}" /><Run Text="  ·  " /><Run Text="{Binding RelativeTime, Mode=OneWay}" />
+                    </TextBlock>
+
+                    <Border HorizontalAlignment="Right"
+                            Padding="8,1"
+                            CornerRadius="8"
+                            Background="{DynamicResource AccentFillColorDefaultBrush}"
+                            Visibility="{Binding IsCopied, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="✓ Copied"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    </Border>
+
+                    <Border HorizontalAlignment="Right"
+                            Padding="8,1"
+                            CornerRadius="8"
+                            Background="{DynamicResource SystemFillColorCriticalBrush}"
+                            Visibility="{Binding IsCopyFailed, Converter={StaticResource BoolToVisibility}}">
+                        <TextBlock Text="Copy failed"
+                                   FontSize="11"
+                                   Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                    </Border>
+                </Grid>
+
+                <!-- Mouse রাখলে ডান কোণে delete -->
+                <ui:Button x:Name="DeleteButton"
+                           Grid.RowSpan="2"
+                           HorizontalAlignment="Right"
+                           VerticalAlignment="Top"
+                           Margin="0,-4,-6,0"
+                           Width="28"
+                           Height="28"
+                           Padding="0"
+                           Appearance="Transparent"
+                           Focusable="False"
+                           ToolTip="Delete"
+                           Icon="{ui:SymbolIcon Delete24}"
+                           Visibility="Hidden"
+                           Click="Delete_Click" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, RelativeSource={RelativeSource AncestorType=ListBoxItem}}" Value="True">
+                    <Setter TargetName="DeleteButton" Property="Visibility" Value="Visible" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
     </UserControl.Resources>
 
-    <!-- শুধু test এর জন্য সাধারণ list; সুন্দর UI দিন ৭ এ -->
     <Grid Margin="4,12,4,4">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
-        <ui:TextBlock Grid.Row="0"
-                      Text="{Binding CountText}"
-                      FontTypography="BodyStrong"
-                      Margin="4,0,0,8" />
+        <ui:TextBox x:Name="SearchBox"
+                    Grid.Row="0"
+                    PlaceholderText="Search clipboard"
+                    Icon="{ui:SymbolIcon Search24}"
+                    ClearButtonEnabled="True"
+                    Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                    PreviewKeyDown="SearchBox_PreviewKeyDown" />
 
-        <ListBox Grid.Row="1"
+        <Grid Grid.Row="1" Margin="0,10,0,10">
+            <StackPanel Orientation="Horizontal">
+                <RadioButton Style="{StaticResource ChipStyle}"
+                             Content="All"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=All}" />
+                <RadioButton Style="{StaticResource ChipStyle}"
+                             Content="Text"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Text}" />
+                <RadioButton Style="{StaticResource ChipStyle}"
+                             Content="Images"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Images}" />
+            </StackPanel>
+
+            <ui:Button HorizontalAlignment="Right"
+                       Appearance="Transparent"
+                       Padding="8,3"
+                       FontSize="12"
+                       Content="Clear all"
+                       IsEnabled="{Binding HasAny}"
+                       Click="ClearAll_Click" />
+        </Grid>
+
+        <ListBox x:Name="ItemList"
+                 Grid.Row="2"
                  ItemsSource="{Binding Items}"
+                 SelectedItem="{Binding SelectedItem}"
+                 ItemTemplate="{StaticResource CardTemplate}"
+                 ItemContainerStyle="{StaticResource CardStyle}"
+                 SelectionMode="Single"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="0"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.CanContentScroll="True"
                  VirtualizingPanel.IsVirtualizing="True"
                  VirtualizingPanel.VirtualizationMode="Recycling"
-                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
-            <ListBox.ItemTemplate>
-                <DataTemplate DataType="{x:Type models:ClipboardItem}">
-                    <StackPanel Margin="0,2">
-                        <TextBlock x:Name="PreviewText"
-                                   Text="{Binding Preview}"
-                                   TextWrapping="Wrap"
-                                   TextTrimming="CharacterEllipsis"
-                                   MaxHeight="40" />
-                        <Image x:Name="Thumb"
-                               Visibility="Collapsed"
-                               Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailConverter}}"
-                               MaxHeight="120"
-                               HorizontalAlignment="Left"
-                               Stretch="Uniform" />
-                        <TextBlock FontSize="11"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}">
-                            <Run Text="{Binding SourceApp, Mode=OneWay, TargetNullValue=Unknown app}" />
-                            <Run Text=" · " />
-                            <Run Text="{Binding CreatedAt, Mode=OneWay, StringFormat=HH:mm:ss}" />
-                        </TextBlock>
-                    </StackPanel>
-                    <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static models:ClipboardItemKind.Image}">
-                            <Setter TargetName="Thumb" Property="Visibility" Value="Visible" />
-                            <Setter TargetName="PreviewText" Property="FontSize" Value="11" />
-                        </DataTrigger>
-                    </DataTemplate.Triggers>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
+                 VirtualizingPanel.ScrollUnit="Pixel"
+                 PreviewKeyDown="ItemList_PreviewKeyDown">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <VirtualizingStackPanel />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
         </ListBox>
+
+        <!-- খালি অবস্থা -->
+        <StackPanel Grid.Row="2"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    IsHitTestVisible="False"
+                    Visibility="{Binding IsEmptyVisible, Converter={StaticResource BoolToVisibility}}">
+            <ui:SymbolIcon x:Name="EmptyIcon"
+                           FontSize="40"
+                           HorizontalAlignment="Center"
+                           Foreground="{DynamicResource TextFillColorTertiaryBrush}">
+                <ui:SymbolIcon.Style>
+                    <Style TargetType="ui:SymbolIcon">
+                        <Setter Property="Symbol" Value="Search24" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsHistoryEmpty}" Value="True">
+                                <Setter Property="Symbol" Value="Clipboard24" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ui:SymbolIcon.Style>
+            </ui:SymbolIcon>
+            <TextBlock Text="{Binding EmptyMessage}"
+                       Margin="0,8,0,0"
+                       HorizontalAlignment="Center"
+                       FontSize="13"
+                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        </StackPanel>
     </Grid>
 </UserControl>
