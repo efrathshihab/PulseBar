@@ -18,6 +18,8 @@ public partial class App : Application
     private PopupWindow? _popup;
     private SystemMonitor? _systemMonitor;
     private OverviewViewModel? _overviewViewModel;
+    private ClipboardManager? _clipboardManager;
+    private ClipboardViewModel? _clipboardViewModel;
     private SingleInstance? _singleInstance;
 
     protected override void OnStartup(StartupEventArgs e)
@@ -38,8 +40,13 @@ public partial class App : Application
         var state = AppState.Current;
         _overviewViewModel = new OverviewViewModel(state, Dispatcher);
 
+        // Clipboard history: শুরু থেকেই শোনে, history background এ load হয়
+        _clipboardManager = new ClipboardManager(new ClipboardStorage());
+        _clipboardViewModel = new ClipboardViewModel(_clipboardManager, state, Dispatcher);
+        _clipboardManager.Start();
+
         // Popup একবারই বানানো হয়; পরে শুধু Hide/Show
-        _popup = new PopupWindow(_overviewViewModel);
+        _popup = new PopupWindow(_overviewViewModel, _clipboardViewModel);
         SystemThemeWatcher.Watch(_popup);
         _singleInstance.ListenForActivation(() => Dispatcher.BeginInvoke(() => _popup.ShowPopup()));
 
@@ -78,6 +85,8 @@ public partial class App : Application
         _trayIconUpdater?.Dispose();
         _taskbarOverlay?.Dispose();
         _overviewViewModel?.Dispose();
+        _clipboardViewModel?.Dispose();
+        _clipboardManager?.Dispose(); // বাকি থাকা save এখানে disk এ লেখা হয়
         _popup?.CloseForShutdown();
         _trayIcon?.Dispose();
         _singleInstance?.Dispose();

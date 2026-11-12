@@ -1,12 +1,64 @@
 <UserControl x:Class="PulseBar.Views.Pages.ClipboardPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml">
-    <Grid>
-        <ui:TextBlock Text="Clipboard — coming soon"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:vm="clr-namespace:PulseBar.ViewModels"
+             xmlns:models="clr-namespace:PulseBar.Models"
+             xmlns:util="clr-namespace:PulseBar.Utilities"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:ClipboardViewModel}">
+    <UserControl.Resources>
+        <util:ThumbnailConverter x:Key="ThumbnailConverter" />
+    </UserControl.Resources>
+
+    <!-- শুধু test এর জন্য সাধারণ list; সুন্দর UI দিন ৭ এ -->
+    <Grid Margin="4,12,4,4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <ui:TextBlock Grid.Row="0"
+                      Text="{Binding CountText}"
                       FontTypography="BodyStrong"
-                      Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                      HorizontalAlignment="Center"
-                      VerticalAlignment="Center" />
+                      Margin="4,0,0,8" />
+
+        <ListBox Grid.Row="1"
+                 ItemsSource="{Binding Items}"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+            <ListBox.ItemTemplate>
+                <DataTemplate DataType="{x:Type models:ClipboardItem}">
+                    <StackPanel Margin="0,2">
+                        <TextBlock x:Name="PreviewText"
+                                   Text="{Binding Preview}"
+                                   TextWrapping="Wrap"
+                                   TextTrimming="CharacterEllipsis"
+                                   MaxHeight="40" />
+                        <Image x:Name="Thumb"
+                               Visibility="Collapsed"
+                               Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailConverter}}"
+                               MaxHeight="120"
+                               HorizontalAlignment="Left"
+                               Stretch="Uniform" />
+                        <TextBlock FontSize="11"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                            <Run Text="{Binding SourceApp, Mode=OneWay, TargetNullValue=Unknown app}" />
+                            <Run Text=" · " />
+                            <Run Text="{Binding CreatedAt, Mode=OneWay, StringFormat=HH:mm:ss}" />
+                        </TextBlock>
+                    </StackPanel>
+                    <DataTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Kind}" Value="{x:Static models:ClipboardItemKind.Image}">
+                            <Setter TargetName="Thumb" Property="Visibility" Value="Visible" />
+                            <Setter TargetName="PreviewText" Property="FontSize" Value="11" />
+                        </DataTrigger>
+                    </DataTemplate.Triggers>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
     </Grid>
 </UserControl>
