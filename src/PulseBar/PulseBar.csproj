@@ -11,6 +11,55 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
+  <!--
+    Debug build: চালু থাকা PulseBar bin\Debug\PulseBar.exe lock করে রাখে, তখন dotnet run এর build
+    copy করতে না পেরে fail করে। তাই build এর আগেই তাকে Quit event পাঠিয়ে বন্ধ হওয়া পর্যন্ত
+    (সর্বোচ্চ ৫ সেকেন্ড) অপেক্ষা করা হয়। Release build এ এটা চলে না।
+  -->
+  <UsingTask TaskName="QuitRunningPulseBar"
+             TaskFactory="RoslynCodeTaskFactory"
+             AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
+    <Task>
+      <Using Namespace="System.Threading" />
+      <Code Type="Fragment" Language="cs"><![CDATA[
+        try
+        {
+            EventWaitHandle quit;
+            if (EventWaitHandle.TryOpenExisting(@"Local\PulseBar.Quit", out quit))
+            {
+                using (quit)
+                {
+                    quit.Set();
+                }
+
+                Log.LogMessage(MessageImportance.High, "PulseBar: asked the running instance to quit");
+                var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+                while (stopwatch.ElapsedMilliseconds < 5000)
+                {
+                    Mutex mutex;
+                    if (!Mutex.TryOpenExisting(@"Local\PulseBar.SingleInstance", out mutex))
+                    {
+                        break;
+                    }
+
+                    mutex.Dispose();
+                    Thread.Sleep(100);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.LogMessage(MessageImportance.Low, "PulseBar quit check skipped: " + ex.Message);
+        }
+      ]]></Code>
+    </Task>
+  </UsingTask>
+
+  <!-- CoreBuild না: BeforeTargets তার DependsOn (copy সহ) শেষ হওয়ার পরে চলে, তখন দেরি হয়ে যায় -->
+  <Target Name="QuitRunningDevInstance" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' == 'Debug'">
+    <QuitRunningPulseBar />
+  </Target>
+
   <ItemGroup>
     <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
