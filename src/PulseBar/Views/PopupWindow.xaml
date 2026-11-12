@@ -16,70 +16,75 @@
                  ExtendsContentIntoTitleBar="True"
                  WindowBackdropType="Mica"
                  WindowCornerPreference="Round">
-    <Grid Margin="12,12,12,8">
-        <Grid.RowDefinitions>
-            <RowDefinition Height="Auto" />
-            <RowDefinition Height="*" />
-        </Grid.RowDefinitions>
+    <Grid>
+        <Grid Margin="12,12,12,8">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0"
-                    Orientation="Horizontal"
-                    Margin="4,0,0,8">
-            <Border Width="22"
-                    Height="22"
-                    CornerRadius="5"
-                    Background="#7C5CFF"
-                    VerticalAlignment="Center"
-                    Margin="0,0,8,0">
-                <TextBlock Text="P"
-                           Foreground="White"
-                           FontWeight="Bold"
-                           FontSize="13"
-                           HorizontalAlignment="Center"
-                           VerticalAlignment="Center" />
-            </Border>
-            <ui:TextBlock Text="PulseBar"
-                          FontTypography="Subtitle"
-                          VerticalAlignment="Center" />
-        </StackPanel>
+            <StackPanel Grid.Row="0"
+                        Orientation="Horizontal"
+                        Margin="4,0,0,8">
+                <Border Width="22"
+                        Height="22"
+                        CornerRadius="5"
+                        Background="#7C5CFF"
+                        VerticalAlignment="Center"
+                        Margin="0,0,8,0">
+                    <TextBlock Text="P"
+                               Foreground="White"
+                               FontWeight="Bold"
+                               FontSize="13"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                </Border>
+                <ui:TextBlock Text="PulseBar"
+                              FontTypography="Subtitle"
+                              VerticalAlignment="Center" />
+            </StackPanel>
 
-        <TabControl x:Name="Tabs" Grid.Row="1">
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel HorizontalAlignment="Center">
-                        <ui:SymbolIcon Symbol="Gauge24" HorizontalAlignment="Center" Margin="0,0,0,2" />
-                        <TextBlock Text="Overview" FontSize="12" HorizontalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <pages:OverviewPage x:Name="OverviewTab" />
-            </TabItem>
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel HorizontalAlignment="Center">
-                        <ui:SymbolIcon Symbol="Speaker224" HorizontalAlignment="Center" Margin="0,0,0,2" />
-                        <TextBlock Text="Sound" FontSize="12" HorizontalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <pages:SoundPage />
-            </TabItem>
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel HorizontalAlignment="Center">
-                        <ui:SymbolIcon Symbol="Clipboard24" HorizontalAlignment="Center" Margin="0,0,0,2" />
-                        <TextBlock Text="Clipboard" FontSize="12" HorizontalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <pages:ClipboardPage x:Name="ClipboardTab" />
-            </TabItem>
-            <TabItem>
-                <TabItem.Header>
-                    <StackPanel HorizontalAlignment="Center">
-                        <ui:SymbolIcon Symbol="Settings24" HorizontalAlignment="Center" Margin="0,0,0,2" />
-                        <TextBlock Text="Settings" FontSize="12" HorizontalAlignment="Center" />
-                    </StackPanel>
-                </TabItem.Header>
-                <pages:SettingsPage />
-            </TabItem>
-        </TabControl>
+            <TabControl x:Name="Tabs" Grid.Row="1">
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel HorizontalAlignment="Center">
+                            <ui:SymbolIcon Symbol="Gauge24" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                            <TextBlock Text="Overview" FontSize="12" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <pages:OverviewPage x:Name="OverviewTab" />
+                </TabItem>
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel HorizontalAlignment="Center">
+                            <ui:SymbolIcon Symbol="Speaker224" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                            <TextBlock Text="Sound" FontSize="12" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <pages:SoundPage />
+                </TabItem>
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel HorizontalAlignment="Center">
+                            <ui:SymbolIcon Symbol="Clipboard24" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                            <TextBlock Text="Clipboard" FontSize="12" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <pages:ClipboardPage x:Name="ClipboardTab" />
+                </TabItem>
+                <TabItem>
+                    <TabItem.Header>
+                        <StackPanel HorizontalAlignment="Center">
+                            <ui:SymbolIcon Symbol="Settings24" HorizontalAlignment="Center" Margin="0,0,0,2" />
+                            <TextBlock Text="Settings" FontSize="12" HorizontalAlignment="Center" />
+                        </StackPanel>
+                    </TabItem.Header>
+                    <pages:SettingsPage />
+                </TabItem>
+            </TabControl>
+        </Grid>
+
+        <!-- Clear all এর মতো confirm dialog popup এর ভেতরেই খোলে, তাই popup লুকায় না -->
+        <ui:ContentDialogHost x:Name="DialogHost" />
     </Grid>
 </ui:FluentWindow>

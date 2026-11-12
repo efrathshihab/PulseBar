@@ -97,6 +97,27 @@ public sealed class ClipboardStorage : IDisposable
         }
     }
 
+    /// <summary>images folder এর সব file মুছে দেয় (Clear all)।</summary>
+    public void DeleteAllImages()
+    {
+        try
+        {
+            if (!Directory.Exists(ImagesDirectory))
+            {
+                return;
+            }
+
+            foreach (string file in Directory.EnumerateFiles(ImagesDirectory))
+            {
+                TryDelete(file);
+            }
+        }
+        catch
+        {
+            // বাকি থাকলে পরের বার শুরুতে orphan হিসেবে মুছে যাবে
+        }
+    }
+
     /// <summary>Item এর ছবি আর thumbnail মুছে দেয়।</summary>
     public static void DeleteFiles(ClipboardItem item)
     {
