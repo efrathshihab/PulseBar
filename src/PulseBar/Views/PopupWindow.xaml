@@ -42,6 +42,13 @@
                 <ui:TextBlock Text="PulseBar"
                               FontTypography="Subtitle"
                               VerticalAlignment="Center" />
+                <!-- শুধু Debug build এ: কখনকার build চলছে -->
+                <ui:TextBlock x:Name="DevLabel"
+                              Visibility="Collapsed"
+                              Margin="8,3,0,0"
+                              FontSize="11"
+                              VerticalAlignment="Center"
+                              Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
             </StackPanel>
 
             <TabControl x:Name="Tabs" Grid.Row="1">

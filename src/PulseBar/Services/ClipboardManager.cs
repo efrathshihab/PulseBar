@@ -49,6 +49,10 @@ public sealed class ClipboardManager : IDisposable
     private Timer? _retentionTimer;
     private IntPtr _ownerHwnd;
     private Dispatcher? _uiDispatcher;
+
+    // বন্ধ হওয়ার সময় worker এর অপেক্ষমাণ UI-thread কাজ বাতিল করে, যাতে Dispose (UI thread) আর
+    // worker একে অপরের জন্য অপেক্ষা করে আটকে না থাকে
+    private readonly CancellationTokenSource _shutdown = new();
     private volatile bool _clipboardChanged;
     private List<ClipboardItem> _items = [];
     private HwndSource? _window;
@@ -153,6 +157,7 @@ public sealed class ClipboardManager : IDisposable
         }
 
         _retentionTimer?.Dispose();
+        _shutdown.Cancel();
         _signal.Set();
         _worker?.Join(TimeSpan.FromSeconds(2));
         _storage.Dispose();
@@ -509,7 +514,15 @@ public sealed class ClipboardManager : IDisposable
             }
 
             bool retry = false;
-            error = dispatcher.Invoke(() => TrySetClipboard(formats, out retry));
+            try
+            {
+                error = dispatcher.Invoke(() => TrySetClipboard(formats, out retry), DispatcherPriority.Send, _shutdown.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                return "App বন্ধ হচ্ছে";
+            }
+
             if (error is null || !retry)
             {
                 return error;

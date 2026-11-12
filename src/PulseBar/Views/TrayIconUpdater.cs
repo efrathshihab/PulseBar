@@ -32,7 +32,11 @@ public sealed class TrayIconUpdater : IDisposable
     private DateTime _lastCheck = DateTime.MinValue;
     private string _lastText = "P";
     private UsageLevel _lastLevel = UsageLevel.Unknown;
-    private string _lastToolTip = "PulseBar";
+    /// <summary>Debug build এ যেমন "PulseBar (dev 21:05)", যাতে বোঝা যায় কোন build চলছে।</summary>
+    public static readonly string ToolTipTitle =
+        BuildInfo.DevLabel is { } dev ? $"PulseBar ({dev})" : "PulseBar";
+
+    private string _lastToolTip = ToolTipTitle;
 
     // এখন tray তে যে icon বসানো আছে; পরেরটা বসলে এটা destroy হয়
     private DrawingIcon? _currentIcon;
@@ -75,7 +79,7 @@ public sealed class TrayIconUpdater : IDisposable
             level = UsageLevel.Unknown;
         }
 
-        string toolTip = "PulseBar — CPU " + Percent(s.CpuPercent)
+        string toolTip = ToolTipTitle + " — CPU " + Percent(s.CpuPercent)
                        + " · GPU " + Percent(s.GpuPercent)
                        + " · RAM " + Percent(s.RamPercent);
 

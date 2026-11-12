@@ -19,22 +19,30 @@ internal sealed class SingleInstance : IDisposable
 {
     private const string MutexName = @"Local\PulseBar.SingleInstance";
     private const string ShowEventName = @"Local\PulseBar.ShowPopup";
+    private const string QuitEventName = @"Local\PulseBar.Quit";
+
+    private static readonly TimeSpan ReplaceTimeout = TimeSpan.FromSeconds(5);
 
     private readonly SafeWaitHandle _mutex;
     private readonly EventWaitHandle _showEvent;
-    private RegisteredWaitHandle? _wait;
+    private readonly EventWaitHandle _quitEvent;
+    private RegisteredWaitHandle? _showWait;
+    private RegisteredWaitHandle? _quitWait;
 
-    private SingleInstance(SafeWaitHandle mutex, EventWaitHandle showEvent)
+    private SingleInstance(SafeWaitHandle mutex, EventWaitHandle showEvent, EventWaitHandle quitEvent)
     {
         _mutex = mutex;
         _showEvent = showEvent;
+        _quitEvent = quitEvent;
     }
 
     /// <summary>
-    /// প্রথম instance হলে object ফেরত দেয়। আগে থেকে কেউ চললে তাকে popup খোলার
-    /// সংকেত পাঠিয়ে null ফেরত দেয়, তখন এই process বন্ধ হয়ে যাবে।
+    /// প্রথম instance হলে object ফেরত দেয়। আগে থেকে কেউ চললে:
+    /// <paramref name="replaceExisting"/> false হলে তাকে popup খোলার সংকেত পাঠিয়ে null ফেরত দেয়
+    /// (তখন এই process বন্ধ হবে); true হলে (Debug build) তাকে Quit করতে বলে, সর্বোচ্চ ৫ সেকেন্ড
+    /// অপেক্ষা করে নিজেই প্রথম instance হয়।
     /// </summary>
-    public static SingleInstance? TryAcquire()
+    public static SingleInstance? TryAcquire(bool replaceExisting)
     {
         IntPtr descriptor = IntPtr.Zero;
         try
@@ -51,43 +59,64 @@ internal sealed class SingleInstance : IDisposable
                 bInheritHandle = false,
             };
 
-            var mutex = CreateMutexW(ref attributes, false, MutexName);
-            int error = Marshal.GetLastWin32Error();
+            var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+            bool askedToQuit = false;
 
-            if (mutex.IsInvalid)
+            while (true)
             {
-                mutex.Dispose();
+                var mutex = CreateMutexW(ref attributes, false, MutexName);
+                int error = Marshal.GetLastWin32Error();
 
                 // ACCESS_DENIED মানে আছে কিন্তু খুলতে পারছি না, সেটাও "আগে থেকে চলছে"
-                if (error == ERROR_ACCESS_DENIED)
+                bool exists = mutex.IsInvalid ? error == ERROR_ACCESS_DENIED : error == ERROR_ALREADY_EXISTS;
+
+                if (mutex.IsInvalid && !exists)
                 {
-                    SignalExisting();
+                    // অন্য কোনো কারণে Mutex বানানো গেল না: single instance ছাড়াই চলবে
+                    mutex.Dispose();
+                    Log.Error($"Single instance mutex failed (Win32 {error}), running unguarded");
+                    return Unguarded();
+                }
+
+                if (!exists)
+                {
+                    if (askedToQuit)
+                    {
+                        Log.Info($"Previous instance exited after {stopwatch.ElapsedMilliseconds} ms");
+                    }
+
+                    return Create(mutex, ref attributes);
+                }
+
+                // আমাদের handle থাকলে Mutex টা বেঁচে থাকে, তাই অপেক্ষার সময় ছেড়ে দিতে হবে
+                mutex.Dispose();
+
+                if (!replaceExisting)
+                {
+                    SignalExisting(ShowEventName, allowForeground: true);
                     return null;
                 }
 
-                // অন্য কোনো কারণে Mutex বানানো গেল না: single instance ছাড়াই চলবে
-                return Unguarded();
-            }
+                if (!askedToQuit)
+                {
+                    askedToQuit = true;
+                    Log.Info("Dev build: asking the running instance to quit");
+                    SignalExisting(QuitEventName, allowForeground: false);
+                }
 
-            if (error == ERROR_ALREADY_EXISTS)
-            {
-                mutex.Dispose();
-                SignalExisting();
-                return null;
-            }
+                if (stopwatch.Elapsed > ReplaceTimeout)
+                {
+                    Log.Error("Previous instance did not quit within 5 s; showing its popup instead");
+                    SignalExisting(ShowEventName, allowForeground: true);
+                    return null;
+                }
 
-            var eventHandle = CreateEventW(ref attributes, false, false, ShowEventName);
-            if (eventHandle.IsInvalid)
-            {
-                eventHandle.Dispose();
-                return new SingleInstance(mutex, new EventWaitHandle(false, EventResetMode.AutoReset));
+                Thread.Sleep(100);
             }
-
-            var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset) { SafeWaitHandle = eventHandle };
-            return new SingleInstance(mutex, showEvent);
         }
-        catch
+        catch (Exception ex)
         {
+            Log.Error("Single instance check failed, running unguarded", ex);
             return Unguarded();
         }
         finally
@@ -99,36 +128,63 @@ internal sealed class SingleInstance : IDisposable
         }
     }
 
+    private static SingleInstance Create(SafeWaitHandle mutex, ref SECURITY_ATTRIBUTES attributes)
+    {
+        return new SingleInstance(mutex, CreateNamedEvent(ShowEventName, ref attributes), CreateNamedEvent(QuitEventName, ref attributes));
+    }
+
+    private static EventWaitHandle CreateNamedEvent(string name, ref SECURITY_ATTRIBUTES attributes)
+    {
+        var handle = CreateEventW(ref attributes, false, false, name);
+        if (handle.IsInvalid)
+        {
+            // নাম ছাড়া event: অন্য instance সংকেত দিতে পারবে না, তবে app চলবে
+            handle.Dispose();
+            return new EventWaitHandle(false, EventResetMode.AutoReset);
+        }
+
+        return new EventWaitHandle(false, EventResetMode.AutoReset) { SafeWaitHandle = handle };
+    }
+
     /// <summary>দ্বিতীয় instance চালু হওয়ার চেষ্টা করলে (background thread থেকে) ডাকা হয়।</summary>
     public void ListenForActivation(Action onActivate)
     {
-        _wait = ThreadPool.RegisterWaitForSingleObject(
-            _showEvent,
-            (_, _) => onActivate(),
-            null,
-            Timeout.Infinite,
-            executeOnlyOnce: false);
+        _showWait = ThreadPool.RegisterWaitForSingleObject(_showEvent, (_, _) => onActivate(), null, Timeout.Infinite, executeOnlyOnce: false);
+    }
+
+    /// <summary>নতুন Debug build চালু হয়ে এটাকে বন্ধ হতে বললে (background thread থেকে) ডাকা হয়।</summary>
+    public void ListenForQuit(Action onQuit)
+    {
+        _quitWait = ThreadPool.RegisterWaitForSingleObject(_quitEvent, (_, _) => onQuit(), null, Timeout.Infinite, executeOnlyOnce: true);
     }
 
     public void Dispose()
     {
-        _wait?.Unregister(null);
+        _showWait?.Unregister(null);
+        _quitWait?.Unregister(null);
         _showEvent.Dispose();
+        _quitEvent.Dispose();
         _mutex.Dispose();
     }
 
     /// <summary>Mutex ছাড়া চলার জন্য (crash না করে); তখন একাধিক instance আটকানো যাবে না।</summary>
     private static SingleInstance Unguarded()
     {
-        return new SingleInstance(new SafeWaitHandle(IntPtr.Zero, false), new EventWaitHandle(false, EventResetMode.AutoReset));
+        return new SingleInstance(
+            new SafeWaitHandle(IntPtr.Zero, false),
+            new EventWaitHandle(false, EventResetMode.AutoReset),
+            new EventWaitHandle(false, EventResetMode.AutoReset));
     }
 
-    private static void SignalExisting()
+    private static void SignalExisting(string eventName, bool allowForeground)
     {
         // চালু থাকা PulseBar যেন popup কে সামনে আনতে পারে
-        AllowSetForegroundWindow(ASFW_ANY);
+        if (allowForeground)
+        {
+            AllowSetForegroundWindow(ASFW_ANY);
+        }
 
-        using var existing = OpenEventW(EVENT_MODIFY_STATE, false, ShowEventName);
+        using var existing = OpenEventW(EVENT_MODIFY_STATE, false, eventName);
         if (!existing.IsInvalid)
         {
             SetEvent(existing);

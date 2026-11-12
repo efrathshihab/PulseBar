@@ -27,6 +27,13 @@ public partial class PopupWindow : FluentWindow
         InitializeComponent();
         OverviewTab.DataContext = overview;
         ClipboardTab.DataContext = clipboard;
+
+        if (BuildInfo.DevLabel is { } dev)
+        {
+            DevLabel.Text = dev;
+            DevLabel.Visibility = Visibility.Visible;
+        }
+
         Deactivated += (_, _) => HidePopup();
         Tabs.SizeChanged += (_, _) => SpreadTabs();
     }
