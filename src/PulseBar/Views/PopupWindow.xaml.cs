@@ -22,10 +22,11 @@ public partial class PopupWindow : FluentWindow
     private long _lastHiddenAt;
     private bool _allowClose;
 
-    public PopupWindow(OverviewViewModel overview, ClipboardViewModel clipboard)
+    public PopupWindow(OverviewViewModel overview, SoundViewModel sound, ClipboardViewModel clipboard)
     {
         InitializeComponent();
         OverviewTab.DataContext = overview;
+        SoundTab.DataContext = sound;
         ClipboardTab.DataContext = clipboard;
 
         if (BuildInfo.DevLabel is { } dev)

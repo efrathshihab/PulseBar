@@ -26,6 +26,8 @@ public partial class App : Application
     private PopupWindow? _popup;
     private SystemMonitor? _systemMonitor;
     private OverviewViewModel? _overviewViewModel;
+    private AudioController? _audioController;
+    private SoundViewModel? _soundViewModel;
     private ClipboardManager? _clipboardManager;
     private ClipboardViewModel? _clipboardViewModel;
     private ClipboardPanel? _clipboardPanel;
@@ -59,13 +61,18 @@ public partial class App : Application
         var state = AppState.Current;
         _overviewViewModel = new OverviewViewModel(state, Dispatcher);
 
+        // Per-app volume: নিজস্ব audio thread এ চলে; popup লুকানো থাকলে UI update হয় না
+        _audioController = new AudioController();
+        _soundViewModel = new SoundViewModel(_audioController, state, Dispatcher);
+        _audioController.Start();
+
         // Clipboard history: শুরু থেকেই শোনে, history background এ load হয়
         _clipboardManager = new ClipboardManager(new ClipboardStorage());
         _clipboardViewModel = new ClipboardViewModel(_clipboardManager, state, Dispatcher);
         _clipboardManager.Start();
 
         // Popup একবারই বানানো হয়; পরে শুধু Hide/Show
-        _popup = new PopupWindow(_overviewViewModel, _clipboardViewModel);
+        _popup = new PopupWindow(_overviewViewModel, _soundViewModel, _clipboardViewModel);
         SystemThemeWatcher.Watch(_popup);
 
         // Hotkey এর clipboard panel: একই ClipboardViewModel; এটাও একবারই বানানো হয়
@@ -241,6 +248,8 @@ public partial class App : Application
         RunStep("TrayIconUpdater", () => _trayIconUpdater?.Dispose());
         RunStep("TaskbarOverlay", () => _taskbarOverlay?.Dispose());
         RunStep("OverviewViewModel", () => _overviewViewModel?.Dispose());
+        RunStep("SoundViewModel", () => _soundViewModel?.Dispose());
+        RunStep("AudioController", () => _audioController?.Dispose(), offUiThread: true); // COM ছাড়া, thread (২ সেকেন্ড)
         RunStep("HotKeys", () => _hotKeys?.Dispose());
         RunStep("ClipboardPanel", () => _clipboardPanel?.CloseForShutdown());
         RunStep("ClipboardViewModel", () => _clipboardViewModel?.Dispose());

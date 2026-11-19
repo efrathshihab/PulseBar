@@ -69,7 +69,7 @@
                             <TextBlock Text="Sound" FontSize="12" HorizontalAlignment="Center" />
                         </StackPanel>
                     </TabItem.Header>
-                    <pages:SoundPage />
+                    <pages:SoundPage x:Name="SoundTab" />
                 </TabItem>
                 <TabItem>
                     <TabItem.Header>
