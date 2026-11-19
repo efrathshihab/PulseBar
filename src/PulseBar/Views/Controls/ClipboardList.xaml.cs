@@ -8,13 +8,21 @@ using System.Windows.Threading;
 using PulseBar.ViewModels;
 using Wpf.Ui.Controls;
 
-namespace PulseBar.Views.Pages;
+namespace PulseBar.Views.Controls;
 
-public partial class ClipboardPage : UserControl
+/// <summary>Card এ click বা Enter: কোন item, আর Shift চাপা ছিল কিনা (তখন শুধু copy)।</summary>
+public sealed class ClipboardItemActivatedEventArgs(ClipboardItemViewModel item, bool copyOnly) : EventArgs
+{
+    public ClipboardItemViewModel Item { get; } = item;
+
+    public bool CopyOnly { get; } = copyOnly;
+}
+
+public partial class ClipboardList : UserControl
 {
     private ClipboardItemViewModel? _pressedItem;
 
-    public ClipboardPage()
+    public ClipboardList()
     {
         InitializeComponent();
 
@@ -25,7 +33,55 @@ public partial class ClipboardPage : UserControl
         ItemList.AddHandler(MouseLeftButtonUpEvent, new MouseButtonEventHandler(ItemList_MouseUp), handledEventsToo: true);
     }
 
+    /// <summary>
+    /// Card এ click বা Enter হলে। কেউ না শুনলে item টা শুধু copy হয় (popup এর tab);
+    /// শুনলে কী হবে সেটা সে ঠিক করে (hotkey panel: copy, বন্ধ, paste)।
+    /// </summary>
+    public event EventHandler<ClipboardItemActivatedEventArgs>? ItemActivated;
+
+    /// <summary>"Clear all" button দেখাবে কিনা। Confirm dialog এর জন্য window এ ContentDialogHost লাগে।</summary>
+    public bool ShowClearAll
+    {
+        get => ClearAllButton.Visibility == Visibility.Visible;
+        set => ClearAllButton.Visibility = value ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private ClipboardViewModel? ViewModel => DataContext as ClipboardViewModel;
+
+    /// <summary>Search box এ keyboard focus দেয় (লেখা থাকলে সব select)।</summary>
+    public void FocusSearch()
+    {
+        SearchBox.Focus();
+        Keyboard.Focus(SearchBox);
+        SearchBox.SelectAll();
+    }
+
+    /// <summary>বাছাই করা item টা দেখা যায় এমনভাবে scroll করে।</summary>
+    public void ScrollToSelected()
+    {
+        if (ViewModel?.SelectedItem is { } item)
+        {
+            ItemList.ScrollIntoView(item);
+        }
+    }
+
+    private void Activate(ClipboardItemViewModel? item)
+    {
+        if (item is null)
+        {
+            return;
+        }
+
+        bool copyOnly = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        if (ItemActivated is { } handler)
+        {
+            handler(this, new ClipboardItemActivatedEventArgs(item, copyOnly));
+        }
+        else
+        {
+            ViewModel?.Copy(item);
+        }
+    }
 
     private void ItemList_MouseDown(object sender, MouseButtonEventArgs e) =>
         _pressedItem = CardItemAt(e.OriginalSource as DependencyObject);
@@ -38,7 +94,7 @@ public partial class ClipboardPage : UserControl
         // চাপা আর ছাড়া একই card এ হতে হবে; delete button বা scrollbar এ হলে copy না
         if (pressed is not null && ReferenceEquals(CardItemAt(e.OriginalSource as DependencyObject), pressed))
         {
-            ViewModel?.Copy(pressed);
+            Activate(pressed);
         }
     }
 
@@ -83,12 +139,15 @@ public partial class ClipboardPage : UserControl
         switch (e.Key)
         {
             case Key.Enter:
-                vm.CopyFirst();
+                Activate(vm.CurrentOrFirst());
                 e.Handled = true;
                 break;
 
             case Key.Down when vm.Items.Count > 0:
-                vm.SelectedItem = vm.Items[0];
+                // বাছাই করা item থাকলে (search এর পরে প্রথমটা) তার পরেরটায়, না থাকলে প্রথমটায়
+                var current = vm.CurrentOrFirst();
+                int index = current is not null && ReferenceEquals(vm.SelectedItem, current) ? vm.Items.IndexOf(current) + 1 : 0;
+                vm.SelectedItem = vm.Items[Math.Clamp(index, 0, vm.Items.Count - 1)];
                 FocusSelected();
                 e.Handled = true;
                 break;
@@ -105,13 +164,19 @@ public partial class ClipboardPage : UserControl
         switch (e.Key)
         {
             case Key.Enter:
-                vm.Copy(selected);
+                Activate(selected);
                 e.Handled = true;
                 break;
 
             case Key.Delete:
                 vm.Delete(selected);
                 FocusSelected();
+                e.Handled = true;
+                break;
+
+            case Key.Up when vm.Items.IndexOf(selected) == 0:
+                // প্রথম item থেকে উপরে: আবার search box এ
+                FocusSearch();
                 e.Handled = true;
                 break;
         }

@@ -28,6 +28,8 @@ public partial class App : Application
     private OverviewViewModel? _overviewViewModel;
     private ClipboardManager? _clipboardManager;
     private ClipboardViewModel? _clipboardViewModel;
+    private ClipboardPanel? _clipboardPanel;
+    private HotKeyManager? _hotKeys;
     private SingleInstance? _singleInstance;
     private int _quitRequested;
 
@@ -65,6 +67,27 @@ public partial class App : Application
         // Popup একবারই বানানো হয়; পরে শুধু Hide/Show
         _popup = new PopupWindow(_overviewViewModel, _clipboardViewModel);
         SystemThemeWatcher.Watch(_popup);
+
+        // Hotkey এর clipboard panel: একই ClipboardViewModel; এটাও একবারই বানানো হয়
+        _clipboardPanel = new ClipboardPanel(_clipboardViewModel, new PasteService(), AppSettings.Current);
+        SystemThemeWatcher.Watch(_clipboardPanel);
+
+        // Popup আর panel একসাথে খোলা থাকবে না
+        state.PopupVisibilityChanged += (_, visible) =>
+        {
+            if (visible)
+            {
+                _clipboardPanel.HidePanel(restoreFocus: false);
+            }
+        };
+        state.ClipboardPanelVisibilityChanged += (_, visible) =>
+        {
+            if (visible)
+            {
+                _popup.HidePopup();
+            }
+        };
+
         _singleInstance.ListenForActivation(() => Dispatcher.BeginInvoke(() => _popup.ShowPopup()));
         _singleInstance.ListenForQuit(() => Dispatcher.BeginInvoke(() => RequestQuit("newer dev build started")));
 
@@ -94,6 +117,7 @@ public partial class App : Application
         }
 
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
+        RegisterClipboardHotKey();
         _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, Dispatcher);
 
         // Tray এর ^ arrow এর বাম পাশে taskbar এর উপর live মান; click করলে tray icon এর মতোই popup
@@ -110,6 +134,32 @@ public partial class App : Application
         _systemMonitor.Start();
 
         Log.Info("Started");
+
+        // Startup শেষ হলে, যাতে প্রথম hotkey তেও panel দ্রুত খোলে
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _clipboardPanel?.Prewarm());
+    }
+
+    /// <summary>
+    /// Clipboard panel এর hotkey। অন্য app আগে থেকে নিয়ে রাখলে crash না করে tray থেকে জানায়;
+    /// tray menu বা popup তখনও কাজ করে।
+    /// </summary>
+    private void RegisterClipboardHotKey()
+    {
+        _hotKeys = new HotKeyManager();
+        var hotKey = AppSettings.Current.ClipboardPanelHotKey;
+        if (_hotKeys.TryRegister(hotKey, () => _clipboardPanel?.Toggle(), out _))
+        {
+            return;
+        }
+
+        try
+        {
+            _trayIcon?.ShowNotification("PulseBar", $"{hotKey} অন্য app ব্যবহার করছে", H.NotifyIcon.Core.NotificationIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Hotkey conflict notification", ex);
+        }
     }
 
     private void ShowOnTaskbar_Click(object sender, RoutedEventArgs e)
@@ -191,6 +241,8 @@ public partial class App : Application
         RunStep("TrayIconUpdater", () => _trayIconUpdater?.Dispose());
         RunStep("TaskbarOverlay", () => _taskbarOverlay?.Dispose());
         RunStep("OverviewViewModel", () => _overviewViewModel?.Dispose());
+        RunStep("HotKeys", () => _hotKeys?.Dispose());
+        RunStep("ClipboardPanel", () => _clipboardPanel?.CloseForShutdown());
         RunStep("ClipboardViewModel", () => _clipboardViewModel?.Dispose());
         RunStep("ClipboardManager", () => _clipboardManager?.Dispose()); // listener, worker (২ সেকেন্ড), শেষ save
         RunStep("Popup", () => _popup?.CloseForShutdown());

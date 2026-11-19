@@ -3,6 +3,7 @@
                  xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
                  xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
                  xmlns:pages="clr-namespace:PulseBar.Views.Pages"
+                 xmlns:controls="clr-namespace:PulseBar.Views.Controls"
                  Title="PulseBar"
                  Width="380"
                  Height="560"
@@ -77,7 +78,7 @@
                             <TextBlock Text="Clipboard" FontSize="12" HorizontalAlignment="Center" />
                         </StackPanel>
                     </TabItem.Header>
-                    <pages:ClipboardPage x:Name="ClipboardTab" />
+                    <controls:ClipboardList x:Name="ClipboardTab" Margin="4,12,4,4" />
                 </TabItem>
                 <TabItem>
                     <TabItem.Header>

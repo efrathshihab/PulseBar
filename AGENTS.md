@@ -15,7 +15,7 @@ C#, .NET 10, WPF
 - Overview: live CPU, GPU (usage, VRAM, temp), RAM, SSD, CPU temp, network up/down, প্রতি ১ সেকেন্ডে update
 - Sound: per-app volume/mute (WASAPI audio sessions), output device switch, master volume
 - Clipboard: text + image history, All/Text/Images filter, search, copy/delete, 24h retention,
-  Ctrl+Shift+V global hotkey দিয়ে আলাদা panel (Enter = copy, Esc = বন্ধ)
+  Ctrl+Alt+V global hotkey দিয়ে আলাদা panel (Enter = paste, Shift+Enter = copy, Esc = বন্ধ)
 - Screenshot: Win+Shift+S এর ছবি history তে যোগ হবে, Screenshots folder watcher, নিজস্ব area-capture hotkey
 - Settings: System/Light/Dark theme, launch at login, Compact/Balanced mode
 - Taskbar overlay: tray এর ^ arrow এর বাম পাশে taskbar এর উপর 2x2 live মান (CPU, GPU, RAM, GPU temp),
@@ -49,6 +49,8 @@ PulseBar/
 - একসাথে একটাই PulseBar চলবে
 - কাজ শেষে বলবে কোন command দিয়ে চালাতে হবে আর কী কী test করতে হবে
 - Commit message এ কোনো Co-Authored-By, Claude-Session বা AI attribution লাইন দেবে না
+- Test এর সময় user এর mouse, keyboard, screen বা clipboard এ হাত দেবে না।
+  UI test দরকার হলে user কে কী test করতে হবে সেটা বলবে।
 
 ## 15 দিনের plan
 | দিন | কাজ | দিন শেষে যা থাকবে |
@@ -60,7 +62,7 @@ PulseBar/
 | ৫ | Overview UI: ring gauge, card, AppState; tray icon এ CPU % এঁকে দেখানো | Overview সম্পূর্ণ |
 | ৬ | ClipboardManager: AddClipboardFormatListener, text/image ধরা, save (JSON/SQLite) | History জমা হয় |
 | ৭ | Clipboard tab: filter, search, copy/delete, clear all, 24h retention | Clipboard tab সম্পূর্ণ |
-| ৮ | HotKeyManager: Ctrl+Shift+V panel, Enter/Esc | Hotkey কাজ করে |
+| ৮ | HotKeyManager: Ctrl+Alt+V panel, Enter/Esc, auto-paste | Hotkey কাজ করে |
 | ৯ | AudioController: app audio session list, per-app volume/mute | Per-app volume |
 | ১০ | Output device list + switch (IPolicyConfig), master volume, Sound tab UI | Sound tab সম্পূর্ণ |
 | ১১ | Screenshot: Win+Shift+S → history, folder watcher, area-capture hotkey | Screenshot feature |

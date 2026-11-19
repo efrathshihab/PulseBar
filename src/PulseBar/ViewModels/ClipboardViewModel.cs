@@ -14,8 +14,9 @@ public enum ClipboardFilter
 }
 
 /// <summary>
-/// Clipboard tab: filter, search, copy, delete, clear all।
-/// Popup লুকানো থাকলে কিছুই update করে না আর কোনো timer চালায় না; খুললে তখন list মেলায়।
+/// Clipboard tab আর hotkey এর clipboard panel দুটোই এটা ব্যবহার করে (একসাথে একটাই খোলা থাকে):
+/// filter, search, copy, delete, clear all। দুটোই লুকানো থাকলে কিছুই update করে না আর কোনো
+/// timer চালায় না; খুললে তখন list মেলায়।
 /// </summary>
 public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
 {
@@ -32,6 +33,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, ClipboardItemViewModel> _cache = [];
     private List<ClipboardItemViewModel> _all = [];
     private int _dirty = 1;
+    private bool _shown;
 
     /// <summary>Filter আর search এর পরে যা দেখা যাবে, নতুনটা আগে।</summary>
     public ObservableCollection<ClipboardItemViewModel> Items { get; } = [];
@@ -71,30 +73,38 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         _searchTimer.Tick += (_, _) =>
         {
             _searchTimer.Stop();
-            ApplyFilter();
+            ApplyFilter(selectFirst: true);
         };
 
         _clockTimer = new DispatcherTimer(DispatcherPriority.Background, dispatcher) { Interval = ClockInterval };
         _clockTimer.Tick += (_, _) => RefreshTimes();
 
         _manager.HistoryChanged += OnHistoryChanged;
-        _state.PopupVisibilityChanged += OnPopupVisibilityChanged;
+        _state.PopupVisibilityChanged += OnVisibilityChanged;
+        _state.ClipboardPanelVisibilityChanged += OnVisibilityChanged;
     }
+
+    /// <summary>Popup বা panel, কোনো একটা খোলা।</summary>
+    private bool IsShown => _state.IsPopupVisible || _state.IsClipboardPanelVisible;
 
     public void Dispose()
     {
         _searchTimer.Stop();
         _clockTimer.Stop();
         _manager.HistoryChanged -= OnHistoryChanged;
-        _state.PopupVisibilityChanged -= OnPopupVisibilityChanged;
+        _state.PopupVisibilityChanged -= OnVisibilityChanged;
+        _state.ClipboardPanelVisibilityChanged -= OnVisibilityChanged;
     }
 
     /// <summary>Item টা clipboard এ দেয়, সবার উপরে তোলে আর ১ সেকেন্ড "Copied" দেখায়।</summary>
-    public async void Copy(ClipboardItemViewModel? item)
+    public void Copy(ClipboardItemViewModel? item) => _ = CopyAsync(item);
+
+    /// <summary><see cref="Copy"/> এর মতোই; clipboard এ লেখা হয়ে গেলে ফল দেয় (সফল হলে true)।</summary>
+    public async Task<bool> CopyAsync(ClipboardItemViewModel? item)
     {
         if (item is null)
         {
-            return;
+            return false;
         }
 
         SelectedItem = item;
@@ -106,26 +116,42 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         bool ok = error is null;
         item.IsCopied = ok;
         item.IsCopyFailed = !ok;
+        _ = ClearFeedbackAsync(item, ok ? CopiedFeedback : FailedFeedback);
+        return ok;
+    }
 
-        await Task.Delay(ok ? CopiedFeedback : FailedFeedback);
+    private static async Task ClearFeedbackAsync(ClipboardItemViewModel item, TimeSpan delay)
+    {
+        await Task.Delay(delay);
         item.IsCopied = false;
         item.IsCopyFailed = false;
     }
 
-    /// <summary>Search box এ Enter: প্রথম result copy।</summary>
-    public void CopyFirst()
+    /// <summary>
+    /// Search box এ Enter চাপলে কোনটা: বাছাই করা item, না থাকলে প্রথম result। Debounce শেষ
+    /// হওয়ার আগে Enter চাপলেও সর্বশেষ লেখা অনুযায়ী।
+    /// </summary>
+    public ClipboardItemViewModel? CurrentOrFirst()
     {
-        // Debounce শেষ হওয়ার আগে Enter চাপলেও সর্বশেষ লেখা অনুযায়ী
-        if (_searchTimer.IsEnabled)
+        FlushSearch();
+
+        if (SelectedItem is { } selected && Items.Contains(selected))
         {
-            _searchTimer.Stop();
-            ApplyFilter();
+            return selected;
         }
 
-        if (Items.Count > 0)
-        {
-            Copy(Items[0]);
-        }
+        return Items.Count > 0 ? Items[0] : null;
+    }
+
+    /// <summary>
+    /// Hotkey panel খোলার সময়: search আর filter মুছে প্রথম item বাছাই করে রাখে।
+    /// </summary>
+    public void ResetForQuickPick()
+    {
+        SearchText = string.Empty;
+        _searchTimer.Stop();
+        Filter = ClipboardFilter.All;
+        ApplyFilter(selectFirst: true);
     }
 
     /// <summary>Item মুছে পরের item টা বাছাই করে রাখে (keyboard দিয়ে পরপর মোছার জন্য)।</summary>
@@ -160,19 +186,35 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         _searchTimer.Start();
     }
 
-    partial void OnFilterChanged(ClipboardFilter value) => ApplyFilter();
+    partial void OnFilterChanged(ClipboardFilter value) => ApplyFilter(selectFirst: true);
+
+    private void FlushSearch()
+    {
+        if (_searchTimer.IsEnabled)
+        {
+            _searchTimer.Stop();
+            ApplyFilter(selectFirst: true);
+        }
+    }
 
     private void OnHistoryChanged(object? sender, EventArgs e)
     {
         // যেকোনো thread থেকে আসতে পারে; একবারই UI thread এ পাঠানো হয়
-        if (Interlocked.Exchange(ref _dirty, 1) == 0 && _state.IsPopupVisible)
+        if (Interlocked.Exchange(ref _dirty, 1) == 0 && IsShown)
         {
             _dispatcher.BeginInvoke(DispatcherPriority.Background, RefreshIfDirty);
         }
     }
 
-    private void OnPopupVisibilityChanged(object? sender, bool visible)
+    private void OnVisibilityChanged(object? sender, bool _)
     {
+        bool visible = IsShown;
+        if (visible == _shown)
+        {
+            return;
+        }
+
+        _shown = visible;
         if (visible)
         {
             RefreshIfDirty();
@@ -183,16 +225,12 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
 
         // লুকানো অবস্থায় কোনো timer চলবে না; বাকি থাকা search এখনই বসানো হয়
         _clockTimer.Stop();
-        if (_searchTimer.IsEnabled)
-        {
-            _searchTimer.Stop();
-            ApplyFilter();
-        }
+        FlushSearch();
     }
 
     private void RefreshIfDirty()
     {
-        if (_state.IsPopupVisible && Volatile.Read(ref _dirty) == 1)
+        if (IsShown && Volatile.Read(ref _dirty) == 1)
         {
             Refresh();
         }
@@ -236,7 +274,10 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         ApplyFilter();
     }
 
-    private void ApplyFilter()
+    /// <param name="selectFirst">
+    /// Search/filter বদলালে true: প্রথম result বাছাই হয়, যাতে Enter যেটা নেবে সেটাই চিহ্নিত থাকে।
+    /// </param>
+    private void ApplyFilter(bool selectFirst = false)
     {
         string query = SearchText.Trim();
 
@@ -259,7 +300,11 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         IsEmptyVisible = Items.Count == 0;
         EmptyMessage = IsHistoryEmpty ? NothingCopied : NothingFound;
 
-        if (SelectedItem is not null && !Items.Contains(SelectedItem))
+        if (selectFirst)
+        {
+            SelectedItem = Items.Count > 0 ? Items[0] : null;
+        }
+        else if (SelectedItem is not null && !Items.Contains(SelectedItem))
         {
             SelectedItem = null;
         }

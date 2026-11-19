@@ -1,4 +1,8 @@
-<UserControl x:Class="PulseBar.Views.Pages.ClipboardPage"
+<!--
+    Clipboard history এর list, search আর filter। Popup এর Clipboard tab আর hotkey এর
+    ClipboardPanel দুটোই এটা ব্যবহার করে, একই ClipboardViewModel দিয়ে।
+-->
+<UserControl x:Class="PulseBar.Views.Controls.ClipboardList"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
@@ -174,7 +178,7 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <Grid Margin="4,12,4,4">
+    <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -202,7 +206,8 @@
                              IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Images}" />
             </StackPanel>
 
-            <ui:Button HorizontalAlignment="Right"
+            <ui:Button x:Name="ClearAllButton"
+                       HorizontalAlignment="Right"
                        Appearance="Transparent"
                        Padding="8,3"
                        FontSize="12"

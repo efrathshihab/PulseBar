@@ -10,6 +10,7 @@ public sealed class AppState
 
     private volatile SystemSnapshot? _snapshot;
     private bool _isPopupVisible;
+    private bool _isClipboardPanelVisible;
 
     private AppState()
     {
@@ -34,11 +35,30 @@ public sealed class AppState
         }
     }
 
+    /// <summary>Hotkey এর clipboard panel এখন খোলা কিনা। শুধু UI thread থেকে বদলায়।</summary>
+    public bool IsClipboardPanelVisible
+    {
+        get => _isClipboardPanelVisible;
+        set
+        {
+            if (_isClipboardPanelVisible == value)
+            {
+                return;
+            }
+
+            _isClipboardPanelVisible = value;
+            ClipboardPanelVisibilityChanged?.Invoke(this, value);
+        }
+    }
+
     /// <summary>নতুন snapshot এলে, background thread থেকে।</summary>
     public event EventHandler<SystemSnapshot>? SnapshotUpdated;
 
     /// <summary>Popup খুললে বা লুকালে, UI thread থেকে।</summary>
     public event EventHandler<bool>? PopupVisibilityChanged;
+
+    /// <summary>Clipboard panel খুললে বা লুকালে, UI thread থেকে।</summary>
+    public event EventHandler<bool>? ClipboardPanelVisibilityChanged;
 
     public void UpdateSnapshot(SystemSnapshot snapshot)
     {
