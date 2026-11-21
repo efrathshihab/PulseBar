@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Windows.Threading;
 using H.NotifyIcon;
 using PulseBar.Models;
+using PulseBar.Services;
 using PulseBar.Utilities;
 using DrawingColor = System.Drawing.Color;
 using DrawingIcon = System.Drawing.Icon;
@@ -9,7 +10,7 @@ using DrawingIcon = System.Drawing.Icon;
 namespace PulseBar.Views;
 
 /// <summary>
-/// Tray icon এ CPU % এর সংখ্যা আর level অনুযায়ী রং দেখায়।
+/// Tray icon এ CPU % এর সংখ্যা আর level অনুযায়ী রং দেখায়; tooltip এ CPU, GPU, RAM আর master volume।
 /// প্রতি ২ সেকেন্ডে একবার দেখে, আর শুধু সংখ্যা বা রং বদলালে icon নতুন করে বানায়।
 /// </summary>
 /// <remarks>
@@ -27,6 +28,7 @@ public sealed class TrayIconUpdater : IDisposable
 
     private readonly AppState _state;
     private readonly TaskbarIcon _trayIcon;
+    private readonly AudioController _audio;
     private readonly Dispatcher _dispatcher;
 
     private DateTime _lastCheck = DateTime.MinValue;
@@ -41,10 +43,11 @@ public sealed class TrayIconUpdater : IDisposable
     // এখন tray তে যে icon বসানো আছে; পরেরটা বসলে এটা destroy হয়
     private DrawingIcon? _currentIcon;
 
-    public TrayIconUpdater(AppState state, TaskbarIcon trayIcon, Dispatcher dispatcher)
+    public TrayIconUpdater(AppState state, TaskbarIcon trayIcon, AudioController audio, Dispatcher dispatcher)
     {
         _state = state;
         _trayIcon = trayIcon;
+        _audio = audio;
         _dispatcher = dispatcher;
         _state.SnapshotUpdated += OnSnapshotUpdated;
     }
@@ -81,7 +84,8 @@ public sealed class TrayIconUpdater : IDisposable
 
         string toolTip = ToolTipTitle + " — CPU " + Percent(s.CpuPercent)
                        + " · GPU " + Percent(s.GpuPercent)
-                       + " · RAM " + Percent(s.RamPercent);
+                       + " · RAM " + Percent(s.RamPercent)
+                       + " · Vol " + VolumeText(_audio.GetMaster());
 
         bool iconChanged = text != _lastText || level != _lastLevel;
         bool toolTipChanged = toolTip != _lastToolTip;
@@ -134,6 +138,14 @@ public sealed class TrayIconUpdater : IDisposable
 
     private static string Percent(double? value) =>
         value is { } v ? Math.Round(v).ToString("0", CultureInfo.InvariantCulture) + "%" : "N/A";
+
+    // Volume এর snapshot audio thread রাখে; এখানে শুধু পড়া, তাই কোনো COM call নেই
+    private static string VolumeText(MasterVolumeState? master) => master switch
+    {
+        null => "N/A",
+        { IsMuted: true } => "muted",
+        _ => Percent(master.Volume * 100.0),
+    };
 
     private static DrawingColor ToDrawing(System.Windows.Media.Color c) => DrawingColor.FromArgb(c.R, c.G, c.B);
 }

@@ -5,10 +5,59 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
              xmlns:vm="clr-namespace:PulseBar.ViewModels"
+             xmlns:models="clr-namespace:PulseBar.Models"
+             xmlns:util="clr-namespace:PulseBar.Utilities"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:SoundViewModel}">
     <UserControl.Resources>
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+        <util:AudioDeviceKindToSymbolConverter x:Key="KindToSymbol" />
+
+        <Style x:Key="SectionHeader" TargetType="TextBlock">
+            <Setter Property="Margin" Value="2,0,0,6" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+        </Style>
+
+        <!-- Device list এর একটা row: ধরন এর icon, নাম, default হলে ✓ -->
+        <DataTemplate x:Key="DeviceRowTemplate" DataType="{x:Type models:AudioOutputDevice}">
+            <ui:Button HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="Stretch"
+                       Padding="10,7"
+                       Margin="0,0,0,2"
+                       Appearance="Transparent"
+                       ToolTip="{Binding Name}"
+                       AutomationProperties.Name="{Binding Name}"
+                       Command="{Binding DataContext.SelectDeviceCommand, RelativeSource={RelativeSource AncestorType=UserControl}}"
+                       CommandParameter="{Binding}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon Symbol="{Binding Kind, Converter={StaticResource KindToSymbol}}"
+                                   FontSize="18"
+                                   Margin="0,0,10,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <TextBlock Grid.Column="1"
+                               Text="{Binding Name}"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <ui:SymbolIcon Grid.Column="2"
+                                   Symbol="Checkmark20"
+                                   FontSize="16"
+                                   Margin="8,0,0,0"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                   Visibility="{Binding IsDefault, Converter={StaticResource BoolToVisibility}}" />
+                </Grid>
+            </ui:Button>
+        </DataTemplate>
 
         <!-- প্রতিটা app এর row; সব রং theme থেকে -->
         <DataTemplate x:Key="AppRowTemplate" DataType="{x:Type vm:AudioAppViewModel}">
@@ -106,28 +155,230 @@
         </DataTemplate>
     </UserControl.Resources>
 
-    <ScrollViewer Margin="4,12,4,4"
-                  VerticalScrollBarVisibility="Auto"
-                  HorizontalScrollBarVisibility="Disabled">
-        <StackPanel>
-            <ItemsControl ItemsSource="{Binding Apps}"
-                          ItemTemplate="{StaticResource AppRowTemplate}"
-                          Focusable="False" />
+    <Grid Margin="4,12,4,4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
 
-            <!-- System sounds ছাড়া কোনো app নেই -->
-            <StackPanel Margin="0,48,0,0"
-                        HorizontalAlignment="Center"
-                        Visibility="{Binding IsEmptyVisible, Converter={StaticResource BoolToVisibility}}">
-                <ui:SymbolIcon Symbol="SpeakerOff28"
-                               FontSize="40"
-                               HorizontalAlignment="Center"
-                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                <TextBlock Text="এখন কোনো app শব্দ করছে না"
-                           Margin="0,8,0,0"
-                           HorizontalAlignment="Center"
-                           FontSize="13"
-                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+        <StackPanel>
+            <!-- Output: বর্তমান device; click করলে নিচে সব device এর list -->
+            <TextBlock Text="Output" Style="{StaticResource SectionHeader}" />
+            <ui:Button x:Name="OutputButton"
+                       HorizontalAlignment="Stretch"
+                       HorizontalContentAlignment="Stretch"
+                       Padding="10,8"
+                       Command="{Binding ToggleDeviceListCommand}"
+                       AutomationProperties.Name="Output device"
+                       IsEnabled="{Binding HasDevices}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <ui:SymbolIcon Symbol="{Binding CurrentDevice.Kind, Converter={StaticResource KindToSymbol}, FallbackValue=SpeakerOff24}"
+                                   FontSize="20"
+                                   Margin="0,0,10,0"
+                                   VerticalAlignment="Center" />
+                    <TextBlock x:Name="CurrentDeviceName"
+                               Grid.Column="1"
+                               Text="{Binding CurrentDevice.Name}"
+                               ToolTip="{Binding CurrentDevice.Name}"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                    <!-- কোনো device নেই -->
+                    <TextBlock Grid.Column="1"
+                               Text="কোনো output device পাওয়া যায়নি"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding HasDevices}" Value="False">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <ui:SymbolIcon Grid.Column="2"
+                                   Margin="8,0,0,0"
+                                   FontSize="14"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}">
+                        <ui:SymbolIcon.Style>
+                            <Style TargetType="ui:SymbolIcon">
+                                <Setter Property="Symbol" Value="ChevronDown16" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDeviceListOpen}" Value="True">
+                                        <Setter Property="Symbol" Value="ChevronUp16" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding HasDevices}" Value="False">
+                                        <Setter Property="Visibility" Value="Collapsed" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:SymbolIcon.Style>
+                    </ui:SymbolIcon>
+                </Grid>
+            </ui:Button>
+
+            <Border Margin="0,4,0,0"
+                    Padding="4"
+                    CornerRadius="6"
+                    BorderThickness="1"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                    Visibility="{Binding IsDeviceListOpen, Converter={StaticResource BoolToVisibility}}">
+                <ScrollViewer MaxHeight="220"
+                              VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl ItemsSource="{Binding Devices}"
+                                  ItemTemplate="{StaticResource DeviceRowTemplate}"
+                                  Focusable="False" />
+                </ScrollViewer>
+            </Border>
+
+            <!-- IPolicyConfig কাজ না করলে, কয়েক সেকেন্ড -->
+            <StackPanel Orientation="Horizontal"
+                        Margin="2,6,0,0"
+                        Visibility="{Binding IsSwitchErrorVisible, Converter={StaticResource BoolToVisibility}}">
+                <ui:SymbolIcon Symbol="ErrorCircle16"
+                               FontSize="14"
+                               Margin="0,0,6,0"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+                <TextBlock Text="Device বদলানো যায়নি"
+                           FontSize="12"
+                           VerticalAlignment="Center"
+                           Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
+            </StackPanel>
+
+            <!-- Volume: master slider, %, mute -->
+            <StackPanel Margin="0,14,0,0">
+                <StackPanel.Style>
+                    <Style TargetType="StackPanel">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <MultiDataTrigger>
+                                <MultiDataTrigger.Conditions>
+                                    <Condition Binding="{Binding HasDevices}" Value="True" />
+                                    <Condition Binding="{Binding HasMaster}" Value="True" />
+                                </MultiDataTrigger.Conditions>
+                                <Setter Property="Visibility" Value="Visible" />
+                            </MultiDataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </StackPanel.Style>
+                <TextBlock Text="Volume" Style="{StaticResource SectionHeader}" />
+                <Grid Margin="2,0,4,0" DataContext="{Binding Master}">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Slider Minimum="0"
+                            Maximum="100"
+                            SmallChange="1"
+                            LargeChange="10"
+                            TickFrequency="1"
+                            IsSnapToTickEnabled="True"
+                            IsMoveToPointEnabled="True"
+                            VerticalAlignment="Center"
+                            Value="{Binding Volume, Mode=TwoWay}"
+                            AutomationProperties.Name="Master volume">
+                        <Slider.Style>
+                            <Style TargetType="Slider" BasedOn="{StaticResource {x:Type Slider}}">
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                        <Setter Property="Opacity" Value="0.5" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Slider.Style>
+                    </Slider>
+                    <TextBlock Grid.Column="1"
+                               Width="40"
+                               Margin="6,0,0,0"
+                               VerticalAlignment="Center"
+                               TextAlignment="Right"
+                               FontSize="12"
+                               Text="{Binding VolumeText}"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                    <ui:Button Grid.Column="2"
+                               Width="34"
+                               Height="34"
+                               Margin="2,0,0,0"
+                               Padding="0"
+                               VerticalAlignment="Center"
+                               Appearance="Transparent"
+                               AutomationProperties.Name="Master mute"
+                               Command="{Binding ToggleMuteCommand}">
+                        <ui:Button.Style>
+                            <Style TargetType="ui:Button" BasedOn="{StaticResource {x:Type ui:Button}}">
+                                <Setter Property="ToolTip" Value="Mute" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                        <Setter Property="ToolTip" Value="Unmute" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ui:Button.Style>
+                        <ui:SymbolIcon FontSize="18">
+                            <ui:SymbolIcon.Style>
+                                <Style TargetType="ui:SymbolIcon">
+                                    <Setter Property="Symbol" Value="Speaker224" />
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding IsMuted}" Value="True">
+                                            <Setter Property="Symbol" Value="SpeakerMute24" />
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ui:SymbolIcon.Style>
+                        </ui:SymbolIcon>
+                    </ui:Button>
+                </Grid>
+            </StackPanel>
+
+            <!-- পাতলা divider, তারপর Apps -->
+            <StackPanel Visibility="{Binding HasDevices, Converter={StaticResource BoolToVisibility}}">
+                <Border Height="1"
+                        Margin="0,12,0,12"
+                        Background="{DynamicResource DividerStrokeColorDefaultBrush}" />
+                <TextBlock Text="Apps" Style="{StaticResource SectionHeader}" />
             </StackPanel>
         </StackPanel>
-    </ScrollViewer>
+
+        <ScrollViewer Grid.Row="1"
+                      VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
+                      Visibility="{Binding HasDevices, Converter={StaticResource BoolToVisibility}}">
+            <StackPanel>
+                <ItemsControl ItemsSource="{Binding Apps}"
+                              ItemTemplate="{StaticResource AppRowTemplate}"
+                              Focusable="False" />
+
+                <!-- System sounds ছাড়া কোনো app নেই -->
+                <StackPanel Margin="0,32,0,0"
+                            HorizontalAlignment="Center"
+                            Visibility="{Binding IsEmptyVisible, Converter={StaticResource BoolToVisibility}}">
+                    <ui:SymbolIcon Symbol="SpeakerOff28"
+                                   FontSize="40"
+                                   HorizontalAlignment="Center"
+                                   Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
+                    <TextBlock Text="এখন কোনো app শব্দ করছে না"
+                               Margin="0,8,0,0"
+                               HorizontalAlignment="Center"
+                               FontSize="13"
+                               Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
 </UserControl>

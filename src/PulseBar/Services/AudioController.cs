@@ -11,13 +11,14 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Default output device এর audio session গুলো (Volume Mixer এর মতো) পড়ে, exe অনুযায়ী জোড়া দেয়,
-/// আর per-app volume/mute বদলায়।
+/// Output device এর list আর default device বদলানো, default device এর master volume, আর তার
+/// audio session গুলো (Volume Mixer এর মতো) exe অনুযায়ী জোড়া দিয়ে per-app volume/mute।
 /// </summary>
 /// <remarks>
 /// সব COM কাজ একটাই নিজস্ব MTA thread এ, ক্রমানুসারে। COM এর event (নতুন session, volume বদল,
 /// device বদল) যেকোনো thread এ আসে; সেগুলো শুধু এই thread এর queue তে কাজ পাঠায়।
-/// UI এর জন্য immutable snapshot (<see cref="GetApps"/>) আর <see cref="AppsChanged"/> event।
+/// UI এর জন্য immutable snapshot (<see cref="GetApps"/>, <see cref="GetDevices"/>, <see cref="GetMaster"/>)
+/// আর তাদের Changed event।
 /// </remarks>
 public sealed class AudioController : IDisposable
 {
@@ -30,9 +31,12 @@ public sealed class AudioController : IDisposable
     private readonly AutoResetEvent _signal = new(false);
     private readonly Lock _gate = new();
     private AudioAppSession[] _apps = [];
+    private AudioOutputDevice[] _devices = [];
+    private MasterVolumeState? _master;
     private Thread? _thread;
     private volatile bool _disposed;
     private int _resyncQueued;
+    private int _devicesQueued;
 
     // নিচের সব শুধু audio thread থেকে ছোঁয়া হয়
     private readonly Dictionary<string, SessionEntry> _sessions = [];
@@ -42,6 +46,13 @@ public sealed class AudioController : IDisposable
     private MMDeviceNotificationClient? _deviceNotifications;
     private MMDevice? _device;
     private AudioSessionManager? _sessionManager;
+    private AudioEndpointVolume? _endpointVolume;
+    private AudioEndpointVolumeNotificationDelegate? _masterHandler;
+    private int _deviceGeneration;
+    private float _masterVolume;
+    private bool _masterMuted;
+    private float? _masterEchoVolume;
+    private bool _masterEchoMuted;
 
     /// <summary>
     /// App এর list বা কারও volume/mute বাইরে থেকে (যেমন Windows এর Volume Mixer) বদলালে, audio thread
@@ -49,12 +60,42 @@ public sealed class AudioController : IDisposable
     /// </summary>
     public event EventHandler? AppsChanged;
 
+    /// <summary>Device যোগ/সরানো, state বা default বদলালে, audio thread থেকে।</summary>
+    public event EventHandler? DevicesChanged;
+
+    /// <summary>
+    /// Master volume/mute বাইরে থেকে (volume key, Windows এর flyout) বদলালে বা default device বদলালে,
+    /// audio thread থেকে। PulseBar নিজে যা লিখেছে তার ফিরতি notification এ আসে না।
+    /// </summary>
+    public event EventHandler? MasterChanged;
+
+    /// <summary>Default device বদলানো যায়নি (IPolicyConfig কাজ করেনি), audio thread থেকে।</summary>
+    public event EventHandler? DeviceSwitchFailed;
+
     /// <summary>এই মুহূর্তের app গুলো: আগে System sounds, তারপর নাম অনুযায়ী।</summary>
     public IReadOnlyList<AudioAppSession> GetApps()
     {
         lock (_gate)
         {
             return _apps;
+        }
+    }
+
+    /// <summary>Active output device গুলো, নাম অনুযায়ী।</summary>
+    public IReadOnlyList<AudioOutputDevice> GetDevices()
+    {
+        lock (_gate)
+        {
+            return _devices;
+        }
+    }
+
+    /// <summary>Default device এর master volume; কোনো device না থাকলে বা পড়া না গেলে null।</summary>
+    public MasterVolumeState? GetMaster()
+    {
+        lock (_gate)
+        {
+            return _master;
         }
     }
 
@@ -96,6 +137,55 @@ public sealed class AudioController : IDisposable
             entry.Control.SimpleAudioVolume.Mute = mute;
             entry.Muted = mute;
         }));
+
+    /// <summary>
+    /// Device টাকে Console, Multimedia আর Communications তিন role এরই default বানায়। সফল হলে
+    /// Windows এর DefaultDeviceChanged থেকে সব নতুন করে বানানো হয়; না হলে <see cref="DeviceSwitchFailed"/>।
+    /// </summary>
+    public void SetDefaultDevice(string deviceId) =>
+        Enqueue(() =>
+        {
+            if (AudioPolicyConfig.TrySetDefaultEndpoint(deviceId, out string? error))
+            {
+                Log.Info($"Audio: set default output device {deviceId}");
+                return;
+            }
+
+            Log.Error($"Audio: could not set default output device {deviceId}: {error}");
+            DeviceSwitchFailed?.Invoke(this, EventArgs.Empty);
+        });
+
+    /// <summary>Default device এর master volume (0.0–1.0)।</summary>
+    public void SetMasterVolume(float volume)
+    {
+        volume = Math.Clamp(volume, 0f, 1f);
+        Enqueue(() =>
+        {
+            if (_endpointVolume is null)
+            {
+                return;
+            }
+
+            ExpectMasterEcho(volume, _masterMuted);
+            _endpointVolume.MasterVolumeLevelScalar = volume;
+            _masterVolume = volume;
+            PublishMaster(raise: false);
+        });
+    }
+
+    public void SetMasterMute(bool mute) =>
+        Enqueue(() =>
+        {
+            if (_endpointVolume is null)
+            {
+                return;
+            }
+
+            ExpectMasterEcho(_masterVolume, mute);
+            _endpointVolume.Mute = mute;
+            _masterMuted = mute;
+            PublishMaster(raise: false);
+        });
 
     public void Dispose()
     {
@@ -175,9 +265,15 @@ public sealed class AudioController : IDisposable
             {
                 if (e.Flow == DataFlow.Render && e.Role == Role.Multimedia)
                 {
-                    Enqueue(Rebuild);
+                    string? id = e.DeviceId;
+                    Enqueue(() => OnDefaultDeviceChanged(id));
                 }
             };
+
+            // যেমন Bluetooth headphone connect/disconnect; capture device এরটাও আসে, তাতে শুধু একবার বাড়তি পড়া
+            _deviceNotifications.DeviceAdded += (_, _) => QueueDeviceRefresh();
+            _deviceNotifications.DeviceRemoved += (_, _) => QueueDeviceRefresh();
+            _deviceNotifications.DeviceStateChanged += (_, _) => QueueDeviceRefresh();
         }
         catch (Exception ex)
         {
@@ -189,7 +285,10 @@ public sealed class AudioController : IDisposable
         Rebuild();
     }
 
-    /// <summary>পুরনো device এর সব কিছু ছেড়ে দিয়ে বর্তমান default device থেকে নতুন করে list বানায়।</summary>
+    /// <summary>
+    /// পুরনো device এর সব কিছু (session, master notification) ছেড়ে দিয়ে বর্তমান default device থেকে
+    /// app list, master volume আর device list নতুন করে বানায়।
+    /// </summary>
     private void Rebuild()
     {
         ReleaseDevice();
@@ -199,15 +298,17 @@ public sealed class AudioController : IDisposable
             return;
         }
 
+        MMDevice device;
         try
         {
-            if (!_enumerator.TryGetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia, out var device) || device is null)
+            if (!_enumerator.TryGetDefaultAudioEndpoint(DataFlow.Render, Role.Multimedia, out var found) || found is null)
             {
                 Log.Info("Audio: no default output device");
-                Publish(raise: true);
+                PublishNoDevice();
                 return;
             }
 
+            device = found;
             _device = device;
             _sessionManager = device.AudioSessionManager;
             _sessionManager.OnSessionCreated += OnSessionCreated;
@@ -217,11 +318,213 @@ public sealed class AudioController : IDisposable
         {
             Log.Error("Audio: could not open the default output device", ex);
             ReleaseDevice();
-            Publish(raise: true);
+            PublishNoDevice();
             return;
         }
 
+        AttachMaster(device);
+        RefreshDevices();
         Resync();
+    }
+
+    /// <summary>
+    /// একই device আবার default বসালেও Windows এটা পাঠায়; তখন সব ছেড়ে আবার বানানোর দরকার নেই।
+    /// </summary>
+    private void OnDefaultDeviceChanged(string? deviceId)
+    {
+        string? currentId = null;
+        try
+        {
+            currentId = _device?.ID;
+        }
+        catch
+        {
+            // পুরনো device নষ্ট: নতুন করে বানাতেই হবে
+        }
+
+        if (deviceId is not null && deviceId == currentId)
+        {
+            return;
+        }
+
+        Rebuild();
+    }
+
+    private void PublishNoDevice()
+    {
+        Publish(raise: true);
+        PublishMaster(raise: true);
+        RefreshDevices();
+    }
+
+    /// <summary>Master volume পড়ে আর তার notification এ লাগে। না পারলে master null, app list তবুও চলে।</summary>
+    private void AttachMaster(MMDevice device)
+    {
+        // পুরনো device এর দেরিতে আসা notification চেনার জন্য
+        int generation = ++_deviceGeneration;
+        _masterEchoVolume = null;
+
+        try
+        {
+            var endpoint = device.AudioEndpointVolume;
+            _masterVolume = endpoint.MasterVolumeLevelScalar;
+            _masterMuted = endpoint.Mute;
+
+            // COM thread থেকে আসে; data টা সেখানেই পড়ে শুধু queue তে পাঠানো
+            _masterHandler = data =>
+            {
+                float volume = data.MasterVolume;
+                bool muted = data.Muted;
+                Enqueue(() => OnMasterNotification(generation, volume, muted));
+            };
+            endpoint.OnVolumeNotification += _masterHandler;
+            _endpointVolume = endpoint;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Audio: master volume unavailable", ex);
+            _endpointVolume = null;
+            _masterHandler = null;
+        }
+
+        PublishMaster(raise: true);
+    }
+
+    private void OnMasterNotification(int generation, float volume, bool muted)
+    {
+        if (generation != _deviceGeneration || _endpointVolume is null)
+        {
+            return;
+        }
+
+        bool echo = _masterEchoVolume is { } expected &&
+                    Math.Abs(expected - volume) < EchoTolerance &&
+                    muted == _masterEchoMuted;
+        _masterVolume = volume;
+        _masterMuted = muted;
+        PublishMaster(raise: !echo);
+    }
+
+    /// <summary>এখনই এই মান লেখা হচ্ছে; এর ফিরতি notification কে বাইরের পরিবর্তন ধরা হবে না।</summary>
+    private void ExpectMasterEcho(float volume, bool muted)
+    {
+        _masterEchoVolume = volume;
+        _masterEchoMuted = muted;
+    }
+
+    private void PublishMaster(bool raise)
+    {
+        var master = _endpointVolume is null ? null : new MasterVolumeState(_masterVolume, _masterMuted);
+        lock (_gate)
+        {
+            _master = master;
+        }
+
+        if (raise)
+        {
+            MasterChanged?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    /// <summary>COM thread থেকে; অনেকগুলো একসাথে এলেও একবারই পড়া হয়।</summary>
+    private void QueueDeviceRefresh()
+    {
+        if (Interlocked.Exchange(ref _devicesQueued, 1) == 0)
+        {
+            Enqueue(RefreshDevices);
+        }
+    }
+
+    /// <summary>Active output device গুলো নতুন করে পড়ে; কিছু না বদলালে event দেয় না।</summary>
+    private void RefreshDevices()
+    {
+        Interlocked.Exchange(ref _devicesQueued, 0);
+        var list = new List<AudioOutputDevice>();
+
+        if (_enumerator is not null)
+        {
+            string? defaultId = null;
+            try
+            {
+                defaultId = _device?.ID;
+            }
+            catch
+            {
+                // Default device এর মধ্যে সরে গেছে; DefaultDeviceChanged এ আবার আসবে
+            }
+
+            try
+            {
+                using var collection = _enumerator.EnumerateAudioEndPoints(DataFlow.Render, DeviceState.Active);
+                int count = collection.Count;
+                for (int i = 0; i < count; i++)
+                {
+                    try
+                    {
+                        using var device = collection[i];
+                        string id = device.ID;
+                        list.Add(new AudioOutputDevice
+                        {
+                            Id = id,
+                            Name = device.FriendlyName,
+                            Kind = KindOf(device),
+                            IsDefault = id == defaultId,
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        // পড়ার মাঝে সরানো হয়েছে ইত্যাদি
+                        Log.Error($"Audio: skipped output device {i}", ex);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Audio: output device enumeration failed", ex);
+            }
+        }
+
+        var devices = list
+            .OrderBy(d => d.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+
+        lock (_gate)
+        {
+            if (devices.SequenceEqual(_devices))
+            {
+                return;
+            }
+
+            _devices = devices;
+        }
+
+        Log.Info($"Audio: {devices.Length} output devices");
+        DevicesChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    private static AudioDeviceKind KindOf(MMDevice device)
+    {
+        try
+        {
+            if (!device.Properties.TryGetValue(PropertyKeys.PKEY_AudioEndpoint_FormFactor, out uint formFactor))
+            {
+                return AudioDeviceKind.Other;
+            }
+
+            // EndpointFormFactor
+            return formFactor switch
+            {
+                1 => AudioDeviceKind.Speakers,
+                3 => AudioDeviceKind.Headphones,
+                5 or 6 => AudioDeviceKind.Headset, // Headset, Handset
+                9 => AudioDeviceKind.Display,      // DigitalAudioDisplayDevice: HDMI/DisplayPort
+                _ => AudioDeviceKind.Other,
+            };
+        }
+        catch
+        {
+            return AudioDeviceKind.Other;
+        }
     }
 
     /// <summary>COM thread থেকে। এই object টা ধার করা, তাই রাখা হয় না; পুরো list আবার মেলানো হয়।</summary>
@@ -509,6 +812,22 @@ public sealed class AudioController : IDisposable
         }
 
         _processWatchers.Clear();
+
+        try
+        {
+            if (_endpointVolume is not null && _masterHandler is not null)
+            {
+                _endpointVolume.OnVolumeNotification -= _masterHandler;
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Audio: master notification release", ex);
+        }
+
+        // Endpoint volume নিজে device এর Dispose এ ছাড়া হয় (notification registration সহ)
+        _endpointVolume = null;
+        _masterHandler = null;
 
         try
         {

@@ -61,7 +61,7 @@ public partial class App : Application
         var state = AppState.Current;
         _overviewViewModel = new OverviewViewModel(state, Dispatcher);
 
-        // Per-app volume: নিজস্ব audio thread এ চলে; popup লুকানো থাকলে UI update হয় না
+        // Output device, master আর per-app volume: নিজস্ব audio thread এ চলে; popup লুকানো থাকলে UI update হয় না
         _audioController = new AudioController();
         _soundViewModel = new SoundViewModel(_audioController, state, Dispatcher);
         _audioController.Start();
@@ -125,7 +125,7 @@ public partial class App : Application
 
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
         RegisterClipboardHotKey();
-        _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, Dispatcher);
+        _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, _audioController, Dispatcher);
 
         // Tray এর ^ arrow এর বাম পাশে taskbar এর উপর live মান; click করলে tray icon এর মতোই popup
         _taskbarOverlay = new TaskbarOverlayHost(state, Dispatcher);
