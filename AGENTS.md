@@ -28,7 +28,7 @@ PulseBar/
 │  ├─ App.xaml / App.xaml.cs
 │  ├─ Views/        ← popup, tabs
 │  ├─ ViewModels/   ← ViewModel for each page (CommunityToolkit.Mvvm)
-│  ├─ Services/     ← SystemMonitor, ClipboardManager, AudioController, HotKeyManager, ScreenshotWatcher, UpdateManager
+│  ├─ Services/     ← SystemMonitor, ClipboardManager, AudioController, HotKeyManager, ScreenshotWatcher, UpdateService
 │  ├─ Models/       ← AppState, settings
 │  ├─ Utilities/
 │  └─ Assets/       ← icons, images

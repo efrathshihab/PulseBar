@@ -9,12 +9,25 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <!-- GpuMonitor: to read PDH instance names directly without building strings -->
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+
+    <!-- Shown in Settings > About; CI overrides it from the tag (-p:Version=1.0.1) -->
+    <Version>1.0.0</Version>
+    <Product>PulseBar</Product>
+    <ApplicationIcon>Assets\PulseBar.ico</ApplicationIcon>
+
+    <!-- Our own Program.Main, so VelopackApp runs before anything else (App.xaml has no Main) -->
+    <StartupObject>PulseBar.Program</StartupObject>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ApplicationDefinition Remove="App.xaml" />
+    <Page Include="App.xaml" />
+  </ItemGroup>
 
   <!--
     Debug build: a running PulseBar keeps bin\Debug\PulseBar.exe locked, so dotnet run's build
     fails to copy it. So before the build it is sent the Quit event, and we wait until it exits
-    (up to 5 seconds). This doesn't run for Release builds.
+    (up to 5 seconds). This never runs for Release builds (local build-installer.ps1 and CI) or on CI.
   -->
   <UsingTask TaskName="QuitRunningPulseBar" TaskFactory="RoslynCodeTaskFactory" AssemblyFile="$(MSBuildToolsPath)\Microsoft.Build.Tasks.Core.dll">
     <Task>
@@ -54,7 +67,7 @@
   </UsingTask>
 
   <!-- Not CoreBuild: BeforeTargets runs after its DependsOn (including copy), which is too late -->
-  <Target Name="QuitRunningDevInstance" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' == 'Debug'">
+  <Target Name="QuitRunningDevInstance" BeforeTargets="PrepareForBuild" Condition="'$(Configuration)' == 'Debug' And '$(CI)' != 'true'">
     <QuitRunningPulseBar />
   </Target>
 
@@ -63,6 +76,7 @@
     <PackageReference Include="H.NotifyIcon.Wpf" Version="2.4.1" />
     <PackageReference Include="LibreHardwareMonitorLib" Version="0.9.6" />
     <PackageReference Include="NAudio" Version="3.3.0" />
+    <PackageReference Include="Velopack" Version="1.2.161" />
     <PackageReference Include="WPF-UI" Version="4.3.0" />
   </ItemGroup>
 

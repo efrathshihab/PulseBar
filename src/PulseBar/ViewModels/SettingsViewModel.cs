@@ -26,9 +26,11 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly Action<string> _notify;
     private LaunchAtLogin _launchAtLogin;
 
-    public SettingsViewModel(AppSettings settings, HotKeyBindings hotKeys, StartupManager startup, Action<string> notify)
+    public SettingsViewModel(AppSettings settings, HotKeyBindings hotKeys, StartupManager startup,
+        UpdateViewModel updates, Action<string> notify)
     {
         Settings = settings;
+        Updates = updates;
         _startup = startup;
         _notify = notify;
         _launchAtLogin = settings.LaunchAtLogin;
@@ -43,6 +45,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     }
 
     public AppSettings Settings { get; }
+
+    /// <summary>Settings > About: check for updates, last check.</summary>
+    public UpdateViewModel Updates { get; }
 
     public HotKeySettingViewModel PanelHotKey { get; }
 

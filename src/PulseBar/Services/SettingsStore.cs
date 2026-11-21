@@ -184,6 +184,7 @@ public sealed class SettingsStore : IDisposable
             writer.WriteString(nameof(AppSettings.ScreenshotHotKey), s.ScreenshotHotKey.ToString());
             writer.WriteBoolean(nameof(AppSettings.WatchScreenshotsFolder), s.WatchScreenshotsFolder);
             writer.WriteBoolean(nameof(AppSettings.AutoCopyScreenshots), s.AutoCopyScreenshots);
+            writer.WriteBoolean(nameof(AppSettings.AutoCheckUpdates), s.AutoCheckUpdates);
             writer.WriteEndObject();
         }
 
@@ -210,6 +211,7 @@ public sealed class SettingsStore : IDisposable
         ReadHotKey(root, nameof(AppSettings.ScreenshotHotKey), v => target.ScreenshotHotKey = v, invalid);
         ReadBool(root, nameof(AppSettings.WatchScreenshotsFolder), v => target.WatchScreenshotsFolder = v, invalid);
         ReadBool(root, nameof(AppSettings.AutoCopyScreenshots), v => target.AutoCopyScreenshots = v, invalid);
+        ReadBool(root, nameof(AppSettings.AutoCheckUpdates), v => target.AutoCheckUpdates = v, invalid);
         return hasLaunch;
     }
 

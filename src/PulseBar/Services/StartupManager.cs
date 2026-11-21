@@ -198,6 +198,45 @@ public sealed class StartupManager
         }
     }
 
+    /// <summary>
+    /// Uninstall: removes our Run key value and the "PulseBar" task. Never asks for UAC; if deleting the
+    /// task needs admin and we don't have it, it is only logged. Never throws.
+    /// </summary>
+    public void RemoveForUninstall()
+    {
+        try
+        {
+            DeleteRunValueIfOurs();
+            Log.Info("Uninstall: Run key value removed (if it was ours)");
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Uninstall: could not remove the Run key value", ex);
+        }
+
+        try
+        {
+            if (QueryTask(out _) == TaskQuery.Missing)
+            {
+                return;
+            }
+
+            if (RunSchtasks(DeleteArgs()).ExitCode == 0)
+            {
+                Log.Info("Uninstall: startup task removed");
+            }
+            else
+            {
+                Log.Error("Uninstall: could not remove the startup task (admin is probably required); " +
+                    $"delete \"{TaskName}\" in Task Scheduler manually");
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Uninstall: startup task", ex);
+        }
+    }
+
     // ---------------- Run key ----------------
 
     private static string? ReadRunValue()
@@ -506,7 +545,9 @@ public sealed class StartupManager
     {
         try
         {
-            if (Environment.ProcessPath is not { } exe)
+            // Installed: the stable current\PulseBar.exe; otherwise this process's exe
+            string exe = AppPaths.ExePath;
+            if (!File.Exists(exe))
             {
                 return 2;
             }

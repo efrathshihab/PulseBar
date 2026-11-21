@@ -480,3 +480,7 @@ $RECYCLE.BIN/
 
 # Vim temporary swap files
 *.swp
+
+# PulseBar: installer output of Scripts/build-installer.ps1 (vpk pack) and its publish folder
+releases/
+artifacts/

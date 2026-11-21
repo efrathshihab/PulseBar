@@ -21,6 +21,7 @@
         <Grid Margin="12,12,12,8">
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
@@ -52,7 +53,41 @@
                               Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
             </StackPanel>
 
-            <TabControl x:Name="Tabs" Grid.Row="1">
+            <!-- Shown only when a downloaded update is ready -->
+            <Border x:Name="UpdateBanner"
+                    Grid.Row="1"
+                    Margin="0,0,0,8"
+                    Padding="10,6"
+                    CornerRadius="6"
+                    Background="{DynamicResource CardBackgroundFillColorDefaultBrush}"
+                    BorderBrush="{DynamicResource AccentFillColorDefaultBrush}"
+                    BorderThickness="1">
+                <Border.Style>
+                    <Style TargetType="Border">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsUpdateReady}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <TextBlock FontSize="12"
+                           TextWrapping="Wrap"
+                           Foreground="{DynamicResource TextFillColorPrimaryBrush}">
+                    <Run Text="{Binding BannerText, Mode=OneWay}" />
+                    <Run Text=" · " />
+                    <Hyperlink Command="{Binding RestartCommand}"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                               TextDecorations="None">Restart</Hyperlink>
+                    <Run Text="   " />
+                    <Hyperlink Click="WhatsNew_Click"
+                               Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                               TextDecorations="None">What's new</Hyperlink>
+                </TextBlock>
+            </Border>
+
+            <TabControl x:Name="Tabs" Grid.Row="2">
                 <TabItem>
                     <TabItem.Header>
                         <StackPanel HorizontalAlignment="Center">

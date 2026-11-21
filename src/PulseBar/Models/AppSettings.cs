@@ -99,6 +99,10 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial LaunchAtLogin LaunchAtLogin { get; set; } = LaunchAtLogin.Off;
 
+    /// <summary>Check GitHub for updates 60 seconds after start and then every 6 hours.</summary>
+    [ObservableProperty]
+    public partial bool AutoCheckUpdates { get; set; } = true;
+
     public static TimeSpan ToTimeSpan(ClipboardRetention retention) => retention switch
     {
         ClipboardRetention.OneHour => TimeSpan.FromHours(1),
@@ -121,5 +125,6 @@ public sealed partial class AppSettings : ObservableObject
         OverlayLayout = defaults.OverlayLayout;
         ClipboardRetention = defaults.ClipboardRetention;
         ClipboardEnabled = defaults.ClipboardEnabled;
+        AutoCheckUpdates = defaults.AutoCheckUpdates;
     }
 }

@@ -1,0 +1,58 @@
+# Builds the installer and publishes a GitHub Release when a version tag is pushed:
+#   git tag v1.0.1 && git push origin v1.0.1
+# The release notes come from that version's section in CHANGELOG.md.
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      - name: Get version from tag
+        id: version
+        shell: pwsh
+        run: |
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          if ($version -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Tag must look like v1.2.3 (got '${{ github.ref_name }}')"
+          }
+          "version=$version" >> $env:GITHUB_OUTPUT
+
+      - name: Restore tools (vpk)
+        run: dotnet tool restore
+
+      # The previous release lets vpk build a small delta update. There is none before the first release.
+      - name: Download previous release
+        shell: pwsh
+        run: |
+          dotnet vpk download github --repoUrl "https://github.com/${{ github.repository }}" `
+            --token "${{ secrets.GITHUB_TOKEN }}" --outputDir releases
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "No previous release found; building a full package only"
+            $global:LASTEXITCODE = 0
+          }
+
+      - name: Build installer
+        shell: pwsh
+        run: ./Scripts/build-installer.ps1 -Version "${{ steps.version.outputs.version }}" -OutputDir releases
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        run: |
+          dotnet vpk upload github --repoUrl "https://github.com/${{ github.repository }}" `
+            --token "${{ secrets.GITHUB_TOKEN }}" --outputDir releases --publish `
+            --releaseName "PulseBar ${{ steps.version.outputs.version }}" --tag "${{ github.ref_name }}"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

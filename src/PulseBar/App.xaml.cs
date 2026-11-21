@@ -39,6 +39,11 @@ public partial class App : Application
     private ThemeService? _theme;
     private StartupManager? _startupManager;
     private SettingsViewModel? _settingsViewModel;
+    private UpdateService? _updateService;
+    private UpdateViewModel? _updateViewModel;
+
+    // The last tray notification was "update ready", so clicking it restarts to update
+    private bool _updateNotificationShown;
     private MenuItem? _showOnTaskbarItem;
     private ScreenshotWatcher? _screenshotWatcher;
     private SingleInstance? _singleInstance;
@@ -85,7 +90,8 @@ public partial class App : Application
         var settings = AppSettings.Current;
         _settingsStore = new SettingsStore();
         var loaded = _settingsStore.Load(settings);
-        _startupManager = new StartupManager(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "PulseBar.exe"));
+        // Installed: the stable current\PulseBar.exe of the Velopack install; otherwise this exe
+        _startupManager = new StartupManager(AppPaths.ExePath);
         if (!loaded.HasLaunchAtLogin)
         {
             // First run or the file was corrupt: accept whatever the Run key/task has; nothing is deleted
@@ -130,7 +136,17 @@ public partial class App : Application
         // Hotkeys are registered after the tray icon (so failures can be reported from the tray); created earlier for the Settings tab
         _hotKeys = new HotKeyManager();
         _hotKeyBindings = new HotKeyBindings(_hotKeys, settings);
-        _settingsViewModel = new SettingsViewModel(settings, _hotKeyBindings, _startupManager,
+        // Auto-update: off when not installed (dotnet run, Debug)
+        _updateService = new UpdateService(settings);
+        _updateViewModel = new UpdateViewModel(_updateService, Dispatcher, RestartToUpdate);
+        _updateService.UpdateReady += (_, _) => Dispatcher.BeginInvoke(() =>
+        {
+            Notify($"PulseBar {_updateService.ReadyVersion} is ready — click to restart and update",
+                H.NotifyIcon.Core.NotificationIcon.Info);
+            _updateNotificationShown = true;
+        });
+
+        _settingsViewModel = new SettingsViewModel(settings, _hotKeyBindings, _startupManager, _updateViewModel,
             message => Notify(message, H.NotifyIcon.Core.NotificationIcon.Warning));
 
         // The popup is created once; after that only Hide/Show
@@ -188,6 +204,15 @@ public partial class App : Application
             _showOnTaskbarItem?.IsChecked = settings.ShowTaskbarOverlay;
         }
 
+        _trayIcon.TrayBalloonTipClicked += (_, _) =>
+        {
+            if (_updateNotificationShown)
+            {
+                Log.Info("Tray: update notification clicked");
+                RestartToUpdate();
+            }
+        };
+
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
         BindHotKey(HotKeyAction.ClipboardPanel, () => _clipboardPanel?.Toggle());
         BindHotKey(HotKeyAction.Screenshot, () => TakeScreenshot("hotkey"));
@@ -209,6 +234,8 @@ public partial class App : Application
         // SystemMonitor always runs, because the tray icon shows CPU %
         _systemMonitor = new SystemMonitor(state);
         _systemMonitor.Start();
+
+        _updateService.Start();
 
         Log.Info("Started");
 
@@ -268,8 +295,23 @@ public partial class App : Application
         }
     }
 
+    /// <summary>Restart (banner, dialog or notification click): the updater applies the update after we exit.</summary>
+    private void RestartToUpdate()
+    {
+        _settingsStore?.Flush();
+        if (_updateService?.PrepareRestart() == true)
+        {
+            RequestQuit("restart to update");
+        }
+        else
+        {
+            Notify("Couldn't start the update", H.NotifyIcon.Core.NotificationIcon.Error);
+        }
+    }
+
     private void Notify(string message, H.NotifyIcon.Core.NotificationIcon icon)
     {
+        _updateNotificationShown = false;
         try
         {
             _trayIcon?.ShowNotification("PulseBar", message, icon);
@@ -424,6 +466,7 @@ public partial class App : Application
 
         // Runs in the background, so if it hangs it can be skipped after 2 seconds
         // (PDH, LibreHardwareMonitor's Computer.Close, the monitor loop)
+        RunStep("UpdateService", () => _updateService?.Dispose());
         RunStep("SystemMonitor", () => _systemMonitor?.Dispose(), offUiThread: true);
 
         // The rest touch UI-thread windows/HwndSources, so they run on the UI thread; timed and logged
@@ -433,6 +476,7 @@ public partial class App : Application
         RunStep("SoundViewModel", () => _soundViewModel?.Dispose());
         RunStep("AudioController", () => _audioController?.Dispose(), offUiThread: true); // releases COM, thread (2 seconds)
         RunStep("SettingsViewModel", () => _settingsViewModel?.Dispose());
+        RunStep("UpdateViewModel", () => _updateViewModel?.Dispose());
         RunStep("HotKeyBindings", () => _hotKeyBindings?.Dispose());
         RunStep("HotKeys", () => _hotKeys?.Dispose());
         RunStep("ClipboardPanel", () => _clipboardPanel?.CloseForShutdown());
@@ -443,6 +487,9 @@ public partial class App : Application
         RunStep("TrayIcon", () => _trayIcon?.Dispose());
         RunStep("SettingsStore", () => _settingsStore?.Dispose()); // writes any pending save
         RunStep("SingleInstance", () => _singleInstance?.Dispose());
+
+        // Last: a ready update (Restart not clicked) is applied by Velopack's updater once we have exited
+        RunStep("ApplyUpdateOnExit", () => _updateService?.ApplyOnExit());
 
         Log.Info($"OnExit: done in {total.ElapsedMilliseconds} ms");
         base.OnExit(e);

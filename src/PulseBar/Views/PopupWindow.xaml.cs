@@ -25,6 +25,7 @@ public partial class PopupWindow : FluentWindow
     public PopupWindow(OverviewViewModel overview, SoundViewModel sound, ClipboardViewModel clipboard, SettingsViewModel settings)
     {
         InitializeComponent();
+        UpdateBanner.DataContext = settings.Updates;
         OverviewTab.DataContext = overview;
         SoundTab.DataContext = sound;
         ClipboardTab.DataContext = clipboard;
@@ -61,6 +62,40 @@ public partial class PopupWindow : FluentWindow
             {
                 site.HorizontalAlignment = HorizontalAlignment.Center;
             }
+        }
+    }
+
+    /// <summary>Release notes of the ready update as plain text, in a small dialog inside the popup.</summary>
+    private async void WhatsNew_Click(object sender, RoutedEventArgs e)
+    {
+        if (UpdateBanner.DataContext is not UpdateViewModel updates)
+        {
+            return;
+        }
+
+        var dialog = new ContentDialog(DialogHost)
+        {
+            Title = $"What's new in {updates.ReadyVersion}",
+            Content = new ScrollViewer
+            {
+                MaxHeight = 280,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = new System.Windows.Controls.TextBlock
+                {
+                    Text = updates.ReleaseNotesText,
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                },
+            },
+            PrimaryButtonText = "Restart",
+            CloseButtonText = "Later",
+            DefaultButton = ContentDialogButton.Close,
+            DialogMaxWidth = 340,
+        };
+
+        if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+        {
+            updates.RestartCommand.Execute(null);
         }
     }
 
