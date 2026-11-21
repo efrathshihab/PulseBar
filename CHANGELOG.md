@@ -3,6 +3,14 @@
 Each release's notes come from its section below (`## [x.y.z]`). The release workflow and
 `Scripts/build-installer.ps1` copy that section into the installer and the GitHub Release.
 
+## [0.9.1]
+
+Test release for checking automatic updates.
+
+## [0.9.0]
+
+Test release for checking the installer.
+
 ## [1.0.0]
 
 First release.
