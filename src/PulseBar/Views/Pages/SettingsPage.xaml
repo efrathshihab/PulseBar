@@ -125,7 +125,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Show on taskbar" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Live values next to the tray" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Live values on the taskbar, never over app icons" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding Settings.ShowTaskbarOverlay}"
@@ -143,6 +143,22 @@
                           SelectedValue="{Binding Settings.OverlayLayout}"
                           AutomationProperties.Name="Taskbar layout" />
             </ui:CardControl>
+
+            <ui:CardControl Icon="{ui:SymbolIcon ArrowSwap24}">
+                <ui:CardControl.Header>
+                    <StackPanel>
+                        <TextBlock Style="{StaticResource CardTitle}" Text="Overlay position" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Right: next to the tray · Left: next to widgets" />
+                    </StackPanel>
+                </ui:CardControl.Header>
+                <ComboBox ItemsSource="{Binding PositionOptions}"
+                          SelectedValue="{Binding Settings.OverlayPosition}"
+                          AutomationProperties.Name="Overlay position" />
+            </ui:CardControl>
+
+            <TextBlock Style="{StaticResource Note}"
+                       Text="{Binding OverlayStatus, Mode=OneWay, TargetNullValue=''}"
+                       Foreground="{DynamicResource SystemFillColorCautionBrush}" />
 
             <!-- ================= Clipboard ================= -->
             <TextBlock Style="{StaticResource SectionHeader}" Text="Clipboard" />

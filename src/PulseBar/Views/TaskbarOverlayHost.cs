@@ -4,6 +4,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using PulseBar.Models;
+using PulseBar.Services;
 using PulseBar.Utilities;
 using PulseBar.ViewModels;
 
@@ -16,14 +17,15 @@ namespace PulseBar.Views;
 /// </summary>
 /// <remarks>
 /// The position is checked on every snapshot (1 second), because nobody tells a child window when
-/// the taskbar grew or a new tray icon widened the notification area. SetWindowPos isn't called unless
-/// size/position changed. When Explorer restarts the old child is destroyed with it;
+/// the taskbar grew, an app button was added or a new tray icon widened the notification area.
+/// Each tick the taskbar buttons are measured with UI Automation on a background thread
+/// (<see cref="TaskbarButtonProbe"/>), and <see cref="TaskbarSpace"/> decides whether Balanced, Compact
+/// or nothing fits next to them, so the overlay never covers a button. SetWindowPos isn't called unless
+/// size/position/layout changed. When Explorer restarts the old child is destroyed with it;
 /// it is recreated on "TaskbarCreated" (or the next tick).
 /// </remarks>
 public sealed class TaskbarOverlayHost : IDisposable
 {
-    private const double GapDip = 8;
-
     // Without TrayNotifyWnd, this much space from the taskbar's right edge is assumed for the notification area
     private const double FallbackTrayWidthDip = 200;
 
@@ -35,19 +37,31 @@ public sealed class TaskbarOverlayHost : IDisposable
     private readonly TaskbarOverlayViewModel _viewModel = new();
     private readonly HwndSource _messageWindow;
     private readonly uint _taskbarCreatedMessage;
+    private readonly TaskbarButtonProbe _probe = new();
 
     private HwndSource? _source;
     private IntPtr _taskbar;
-    private Placement? _lastPlacement;
+    private OverlayFit? _lastFit;
     private bool _isLightTaskbar;
     private OverlayLayout _layout = OverlayLayout.Balanced;
+    private OverlayLayout _shownLayout = OverlayLayout.Balanced;
+    private OverlayPosition _position = OverlayPosition.Right;
+    private OverlaySpaceStatus _status;
     private bool _enabled;
     private bool _disposed;
     private DateTime _retryAfter = DateTime.MinValue;
     private int _tickQueued;
 
+    // Latest UI Automation result for _taskbar; UI thread only
+    private MeasureState _measureState = MeasureState.Pending;
+    private TaskbarButtons? _buttons;
+    private int _measuring;
+
     /// <summary>Left-click on the overlay, from the UI thread.</summary>
     public event EventHandler? Clicked;
+
+    /// <summary><see cref="Status"/> changed. UI thread.</summary>
+    public event EventHandler? StatusChanged;
 
     public TaskbarOverlayHost(AppState state, Dispatcher dispatcher)
     {
@@ -98,11 +112,15 @@ public sealed class TaskbarOverlayHost : IDisposable
             else
             {
                 Detach();
+                SetStatus(OverlaySpaceStatus.None);
             }
         }
     }
 
-    /// <summary>Compact (CPU + RAM) or Balanced (2x2). UI thread.</summary>
+    /// <summary>
+    /// The user's choice: Compact (CPU + RAM) or Balanced (2x2). When Balanced doesn't fit, Compact is
+    /// shown without changing this, and Balanced comes back once there is room. UI thread.
+    /// </summary>
     public OverlayLayout Layout
     {
         get => _layout;
@@ -114,12 +132,28 @@ public sealed class TaskbarOverlayHost : IDisposable
             }
 
             _layout = value;
-            if (_source?.RootVisual is TaskbarOverlay view)
-            {
-                view.ApplyLayout(value);
-            }
+            PlaceAgain();
         }
     }
+
+    /// <summary>Which side of the taskbar buttons the overlay goes on. UI thread.</summary>
+    public OverlayPosition Position
+    {
+        get => _position;
+        set
+        {
+            if (_position == value)
+            {
+                return;
+            }
+
+            _position = value;
+            PlaceAgain();
+        }
+    }
+
+    /// <summary>Whether the overlay had to shrink or hide for lack of space. UI thread.</summary>
+    public OverlaySpaceStatus Status => _status;
 
     public void Dispose()
     {
@@ -156,7 +190,10 @@ public sealed class TaskbarOverlayHost : IDisposable
         });
     }
 
-    /// <summary>Attaches to the taskbar if needed, updates the position and sets the latest values.</summary>
+    /// <summary>
+    /// Attaches to the taskbar if needed, updates the position, sets the latest values and starts the
+    /// next button measurement.
+    /// </summary>
     private void Refresh()
     {
         if (!_enabled || _disposed)
@@ -171,6 +208,103 @@ public sealed class TaskbarOverlayHost : IDisposable
         {
             _viewModel.Update(latest);
         }
+
+        StartMeasure();
+    }
+
+    /// <summary>A setting changed: place again right away with the latest measurement.</summary>
+    private void PlaceAgain()
+    {
+        _lastFit = null;
+        if (_enabled && !_disposed)
+        {
+            UpdatePlacement();
+        }
+    }
+
+    /// <summary>
+    /// Measures the taskbar buttons on a thread-pool thread, one measurement at a time, so a hung Explorer
+    /// can't pile up calls. The result is applied on the UI thread and only moves the overlay if it changed.
+    /// </summary>
+    private void StartMeasure()
+    {
+        var taskbar = _taskbar;
+        if (_source is null || taskbar == IntPtr.Zero || Interlocked.Exchange(ref _measuring, 1) == 1)
+        {
+            return;
+        }
+
+        Task.Run(() =>
+        {
+            TaskbarButtons? buttons = null;
+            string? error;
+            try
+            {
+                buttons = _probe.Measure(taskbar);
+                error = _probe.LastError;
+            }
+            catch (Exception ex)
+            {
+                // Measure doesn't throw, but nothing on a background thread may take the app down
+                error = ex.Message;
+            }
+
+            _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
+            {
+                Interlocked.Exchange(ref _measuring, 0);
+                ApplyMeasurement(taskbar, buttons, error);
+            });
+        });
+    }
+
+    private void ApplyMeasurement(IntPtr taskbar, TaskbarButtons? buttons, string? error)
+    {
+        if (_disposed || !_enabled || taskbar != _taskbar)
+        {
+            return;
+        }
+
+        var state = buttons is null ? MeasureState.Failed : MeasureState.Measured;
+        if (state == MeasureState.Failed && _measureState != MeasureState.Failed)
+        {
+            Log.Error($"Taskbar overlay: couldn't measure the taskbar buttons with UI Automation ({error}); placing it next to the tray");
+        }
+        else if (state == MeasureState.Measured && _measureState == MeasureState.Failed)
+        {
+            Log.Info("Taskbar overlay: taskbar buttons can be measured again");
+        }
+
+        if (state == _measureState && buttons == _buttons)
+        {
+            return; // Nothing moved
+        }
+
+        _measureState = state;
+        _buttons = buttons;
+        UpdatePlacement();
+    }
+
+    private void SetStatus(OverlaySpaceStatus status)
+    {
+        if (status == _status)
+        {
+            return;
+        }
+
+        _status = status;
+        string? message = status switch
+        {
+            OverlaySpaceStatus.Hidden => "Taskbar overlay: hidden, not enough space on the taskbar",
+            OverlaySpaceStatus.CompactFallback => "Taskbar overlay: showing compact layout, not enough space",
+            _ when _enabled => "Taskbar overlay: enough space again",
+            _ => null,
+        };
+        if (message is not null)
+        {
+            Log.Info(message);
+        }
+
+        StatusChanged?.Invoke(this, EventArgs.Empty);
     }
 
     private void EnsureAttached()
@@ -221,7 +355,12 @@ public sealed class TaskbarOverlayHost : IDisposable
 
             _source = newSource;
             _taskbar = taskbar;
-            _lastPlacement = null;
+            _shownLayout = _layout;
+            _lastFit = null;
+
+            // A new taskbar (first start or Explorer restarted): stays hidden until its buttons are measured
+            _measureState = MeasureState.Pending;
+            _buttons = null;
         }
         catch (Exception ex) when (ex is Win32Exception or InvalidOperationException or ExternalException)
         {
@@ -235,7 +374,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         var source = _source;
         _source = null;
         _taskbar = IntPtr.Zero;
-        _lastPlacement = null;
+        _lastFit = null;
 
         if (source is null)
         {
@@ -270,10 +409,11 @@ public sealed class TaskbarOverlayHost : IDisposable
         }
 
         var hwnd = source.Handle;
-        var placement = ComputePlacement();
-        if (placement == _lastPlacement)
+        var fit = ComputeFit();
+        SetStatus(fit.Status);
+        if (fit == _lastFit)
         {
-            if (placement.Visible)
+            if (fit.Visible)
             {
                 TaskbarInterop.EnsureOnTop(hwnd);
             }
@@ -281,44 +421,47 @@ public sealed class TaskbarOverlayHost : IDisposable
             return;
         }
 
-        _lastPlacement = placement;
-        if (!placement.Visible)
+        _lastFit = fit;
+        if (!fit.Visible)
         {
             TaskbarInterop.Hide(hwnd);
             return;
         }
 
-        TaskbarInterop.PlaceChild(hwnd, _taskbar, placement.X, placement.Y, placement.Width, placement.Height);
+        if (fit.Layout != _shownLayout && source.RootVisual is TaskbarOverlay view)
+        {
+            view.ApplyLayout(fit.Layout);
+            _shownLayout = fit.Layout;
+        }
+
+        TaskbarInterop.PlaceChild(hwnd, _taskbar, fit.X, fit.Y, fit.Width, fit.Height);
     }
 
-    private Placement ComputePlacement()
+    private OverlayFit ComputeFit()
     {
         if (!TaskbarInterop.TryGetTaskbarLayout(_taskbar, out var bar, out bool isBottom, out bool isAutoHide)
             || !isBottom
             || isAutoHide)
         {
             // For now only a bottom, always-visible taskbar
-            return Placement.Hidden;
+            return OverlayFit.Hidden(OverlaySpaceStatus.None);
+        }
+
+        if (_measureState == MeasureState.Pending)
+        {
+            // Not drawn anywhere until we know where the buttons are
+            return OverlayFit.Hidden(OverlaySpaceStatus.None);
         }
 
         double scale = TaskbarInterop.GetScale(_taskbar);
-        int barHeight = bar.Bottom - bar.Top;
-        int width = (int)Math.Round(TaskbarOverlay.DesignWidth * scale);
-        int height = Math.Min(barHeight, (int)Math.Round(TaskbarOverlay.DesignHeight * scale));
-        int gap = (int)Math.Round(GapDip * scale);
-
-        int right = TaskbarInterop.TryGetTrayNotifyRect(_taskbar, out var notify)
+        int trayLeft = TaskbarInterop.TryGetTrayNotifyRect(_taskbar, out var notify)
             ? notify.Left
-            : bar.Right - (int)Math.Round(FallbackTrayWidthDip * scale);
+            : bar.Right - TaskbarSpace.ToPixels(FallbackTrayWidthDip, scale);
 
-        int x = right - gap - width;
-        int y = bar.Top + (barHeight - height) / 2;
-        if (x < bar.Left || height <= 0)
-        {
-            return Placement.Hidden;
-        }
-
-        return new Placement(true, x, y, width, height);
+        // When UI Automation failed, Buttons is null and TaskbarSpace places it next to the tray like before
+        var geometry = new TaskbarGeometry(bar.Left, bar.Top, bar.Right, bar.Bottom, trayLeft,
+            _measureState == MeasureState.Measured ? _buttons : null, scale);
+        return TaskbarSpace.Fit(geometry, _position, _layout);
     }
 
     private void OnOverlayMouseUp(object sender, MouseButtonEventArgs e)
@@ -361,7 +504,7 @@ public sealed class TaskbarOverlayHost : IDisposable
                     UpdateTheme();
                 }
 
-                // This message also arrives when the taskbar position/auto-hide changes
+                // This message also arrives when the taskbar position/auto-hide/alignment changes
                 ScheduleRefresh(reattach: false);
                 break;
 
@@ -381,10 +524,11 @@ public sealed class TaskbarOverlayHost : IDisposable
             if (reattach)
             {
                 Detach();
+                _probe.Reset();
                 _retryAfter = DateTime.MinValue;
             }
 
-            _lastPlacement = null;
+            _lastFit = null;
             Refresh();
         });
     }
@@ -408,8 +552,14 @@ public sealed class TaskbarOverlayHost : IDisposable
         }
     }
 
-    private readonly record struct Placement(bool Visible, int X, int Y, int Width, int Height)
+    private enum MeasureState
     {
-        public static Placement Hidden => default;
+        /// <summary>No result yet for this taskbar.</summary>
+        Pending,
+
+        Measured,
+
+        /// <summary>UI Automation didn't work; placed next to the tray like before.</summary>
+        Failed,
     }
 }

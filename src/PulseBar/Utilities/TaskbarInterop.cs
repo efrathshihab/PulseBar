@@ -37,6 +37,31 @@ internal static class TaskbarInterop
             && rect.Right > rect.Left;
     }
 
+    /// <summary>The first direct child window of <paramref name="parent"/> with this class; IntPtr.Zero if none.</summary>
+    public static IntPtr FindChild(IntPtr parent, string className) =>
+        parent == IntPtr.Zero ? IntPtr.Zero : FindWindowEx(parent, IntPtr.Zero, className, null);
+
+    /// <summary>Screen rectangles of the visible direct children of <paramref name="parent"/> with this class.</summary>
+    public static List<RECT> VisibleChildRects(IntPtr parent, string className)
+    {
+        var rects = new List<RECT>();
+        if (parent == IntPtr.Zero)
+        {
+            return rects;
+        }
+
+        var child = IntPtr.Zero;
+        while ((child = FindWindowEx(parent, child, className, null)) != IntPtr.Zero)
+        {
+            if (IsWindowVisible(child) && GetWindowRect(child, out var rect) && rect.Right > rect.Left)
+            {
+                rects.Add(rect);
+            }
+        }
+
+        return rects;
+    }
+
     /// <summary>Whether the taskbar is at the bottom and whether auto-hide is on.</summary>
     public static bool TryGetTaskbarLayout(IntPtr taskbar, out RECT rect, out bool isBottom, out bool isAutoHide)
     {

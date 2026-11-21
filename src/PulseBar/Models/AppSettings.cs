@@ -16,8 +16,18 @@ public enum OverlayLayout
     /// <summary>CPU + RAM, one row.</summary>
     Compact,
 
-    /// <summary>CPU, GPU, RAM, GPU temp, 2x2।</summary>
+    /// <summary>CPU, GPU, RAM, GPU temp, 2x2.</summary>
     Balanced,
+}
+
+/// <summary>Which side of the taskbar buttons the overlay goes on.</summary>
+public enum OverlayPosition
+{
+    /// <summary>Right of the app buttons, next to the tray.</summary>
+    Right,
+
+    /// <summary>Left of the app buttons, next to Widgets (or the taskbar's left edge).</summary>
+    Left,
 }
 
 public enum ClipboardRetention
@@ -89,6 +99,13 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial OverlayLayout OverlayLayout { get; set; } = OverlayLayout.Balanced;
 
+    /// <summary>
+    /// The side the overlay is placed on. If it doesn't fit there it shrinks to Compact or hides;
+    /// it never moves to the other side.
+    /// </summary>
+    [ObservableProperty]
+    public partial OverlayPosition OverlayPosition { get; set; } = OverlayPosition.Right;
+
     [ObservableProperty]
     public partial ClipboardRetention ClipboardRetention { get; set; } = ClipboardRetention.TwentyFourHours;
 
@@ -123,6 +140,7 @@ public sealed partial class AppSettings : ObservableObject
         Theme = defaults.Theme;
         ShowTaskbarOverlay = defaults.ShowTaskbarOverlay;
         OverlayLayout = defaults.OverlayLayout;
+        OverlayPosition = defaults.OverlayPosition;
         ClipboardRetention = defaults.ClipboardRetention;
         ClipboardEnabled = defaults.ClipboardEnabled;
         AutoCheckUpdates = defaults.AutoCheckUpdates;

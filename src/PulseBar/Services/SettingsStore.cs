@@ -177,6 +177,7 @@ public sealed class SettingsStore : IDisposable
             writer.WriteString(nameof(AppSettings.LaunchAtLogin), s.LaunchAtLogin.ToString());
             writer.WriteBoolean(nameof(AppSettings.ShowTaskbarOverlay), s.ShowTaskbarOverlay);
             writer.WriteString(nameof(AppSettings.OverlayLayout), s.OverlayLayout.ToString());
+            writer.WriteString(nameof(AppSettings.OverlayPosition), s.OverlayPosition.ToString());
             writer.WriteBoolean(nameof(AppSettings.ClipboardEnabled), s.ClipboardEnabled);
             writer.WriteString(nameof(AppSettings.ClipboardRetention), s.ClipboardRetention.ToString());
             writer.WriteString(nameof(AppSettings.ClipboardPanelHotKey), s.ClipboardPanelHotKey.ToString());
@@ -204,6 +205,7 @@ public sealed class SettingsStore : IDisposable
         bool hasLaunch = ReadEnum<LaunchAtLogin>(root, nameof(AppSettings.LaunchAtLogin), v => target.LaunchAtLogin = v, invalid);
         ReadBool(root, nameof(AppSettings.ShowTaskbarOverlay), v => target.ShowTaskbarOverlay = v, invalid);
         ReadEnum<OverlayLayout>(root, nameof(AppSettings.OverlayLayout), v => target.OverlayLayout = v, invalid);
+        ReadEnum<OverlayPosition>(root, nameof(AppSettings.OverlayPosition), v => target.OverlayPosition = v, invalid);
         ReadBool(root, nameof(AppSettings.ClipboardEnabled), v => target.ClipboardEnabled = v, invalid);
         ReadEnum<ClipboardRetention>(root, nameof(AppSettings.ClipboardRetention), v => target.ClipboardRetention = v, invalid);
         ReadHotKey(root, nameof(AppSettings.ClipboardPanelHotKey), v => target.ClipboardPanelHotKey = v, invalid);

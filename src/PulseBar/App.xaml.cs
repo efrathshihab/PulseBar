@@ -231,14 +231,16 @@ public partial class App : Application
         BindHotKey(HotKeyAction.Screenshot, () => TakeScreenshot("hotkey"));
         _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, _audioController, Dispatcher, startupIcon);
 
-        // Live values on the taskbar, left of the tray's ^ arrow; clicking opens the popup like the tray icon
+        // Live values on the taskbar, beside the app buttons (never over them); clicking opens the popup like the tray icon
         _taskbarOverlay = new TaskbarOverlayHost(state, Dispatcher);
         _taskbarOverlay.Clicked += (_, _) =>
         {
             Log.Info("Taskbar overlay: click");
             _popup.Toggle();
         };
+        _taskbarOverlay.StatusChanged += (_, _) => _settingsViewModel?.SetOverlayStatus(_taskbarOverlay.Status);
         _taskbarOverlay.Layout = settings.OverlayLayout;
+        _taskbarOverlay.Position = settings.OverlayPosition;
         _taskbarOverlay.IsEnabled = settings.ShowTaskbarOverlay;
 
         // Changes from the Settings tab or the tray menu take effect right away
@@ -300,6 +302,10 @@ public partial class App : Application
 
             case nameof(AppSettings.OverlayLayout):
                 _taskbarOverlay?.Layout = settings.OverlayLayout;
+                break;
+
+            case nameof(AppSettings.OverlayPosition):
+                _taskbarOverlay?.Position = settings.OverlayPosition;
                 break;
 
             case nameof(AppSettings.ClipboardRetention):

@@ -80,16 +80,17 @@
                            Text="{Binding GpuTempRowText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
             </Grid>
 
-            <!-- Compact: CPU + RAM in one row with slightly larger text; same width as Balanced -->
+            <!-- Compact: CPU + RAM in one row with slightly larger text; a little narrower than Balanced
+                 (TaskbarSpace.CompactWidthDip = columns + padding), so it fits where Balanced doesn't -->
             <Grid x:Name="CompactGrid"
                   VerticalAlignment="Center"
                   Visibility="Collapsed"
                   TextElement.FontSize="12">
                 <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="24" />
                     <ColumnDefinition Width="30" />
-                    <ColumnDefinition Width="8" />
-                    <ColumnDefinition Width="28" />
+                    <ColumnDefinition Width="6" />
+                    <ColumnDefinition Width="26" />
                     <ColumnDefinition Width="30" />
                 </Grid.ColumnDefinitions>
 

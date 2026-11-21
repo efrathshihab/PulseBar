@@ -66,6 +66,12 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         new(OverlayLayout.Balanced, "Balanced"),
     ];
 
+    public IReadOnlyList<Option<OverlayPosition>> PositionOptions { get; } =
+    [
+        new(OverlayPosition.Right, "Right"),
+        new(OverlayPosition.Left, "Left"),
+    ];
+
     public IReadOnlyList<Option<ClipboardRetention>> RetentionOptions { get; } =
     [
         new(ClipboardRetention.OneHour, "1 hour"),
@@ -117,6 +123,18 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     [ObservableProperty]
     public partial bool ShowDebugWarning { get; private set; }
+
+    /// <summary>Why the taskbar overlay is hidden or compact; null when it shows as chosen.</summary>
+    [ObservableProperty]
+    public partial string? OverlayStatus { get; private set; }
+
+    /// <summary>From TaskbarOverlayHost.StatusChanged. UI thread.</summary>
+    public void SetOverlayStatus(OverlaySpaceStatus status) => OverlayStatus = status switch
+    {
+        OverlaySpaceStatus.Hidden => "Overlay hidden: not enough space on the taskbar",
+        OverlaySpaceStatus.CompactFallback => "Showing compact layout: not enough space",
+        _ => null,
+    };
 
     /// <summary>Result of the startup check. UI thread.</summary>
     public void SetLaunchIssue(string? issue) => LaunchIssue = issue;

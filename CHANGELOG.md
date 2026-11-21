@@ -17,7 +17,7 @@ First release.
 
 - Tray icon with live CPU % and a Fluent popup next to the tray: Overview, Sound, Clipboard and Settings tabs
 - Overview: live CPU, GPU (usage, VRAM, temperature), RAM, drives, CPU temperature and network up/down, updated every second
-- Taskbar overlay with live values next to the tray (Compact or Balanced), colored by threshold
+- Taskbar overlay with live values next to the tray or the widgets (Compact or Balanced), colored by threshold; it never covers app buttons and shrinks to Compact or hides when the taskbar is full
 - Sound: per-app volume and mute, output device switching and master volume
 - Clipboard history for text and images with filters, search, copy and delete, and a retention of 1 hour, 24 hours or 7 days
 - Clipboard panel on Ctrl+Alt+V with auto-paste (Enter pastes, Shift+Enter copies)

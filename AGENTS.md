@@ -18,8 +18,10 @@ C#, .NET 10, WPF
   a separate panel via the Ctrl+Alt+V global hotkey (Enter = paste, Shift+Enter = copy, Esc = close)
 - Screenshot: Win+Shift+S images are added to history, Screenshots folder watcher, own area-capture hotkey
 - Settings: System/Light/Dark theme, launch at login, Compact/Balanced mode
-- Taskbar overlay: 2x2 live values (CPU, GPU, RAM, GPU temp) on the taskbar, left of the tray's ^ arrow,
-  colored by threshold, click opens the popup; toggled with "Show on taskbar" in the tray menu
+- Taskbar overlay: 2x2 live values (CPU, GPU, RAM, GPU temp) on the taskbar, left of the tray's ^ arrow
+  (or right of Widgets with "Overlay position: Left"), colored by threshold, click opens the popup; toggled
+  with "Show on taskbar" in the tray menu. It never covers taskbar buttons: UI Automation measures them,
+  and when Balanced doesn't fit it shows Compact, then hides (Settings shows why)
 
 ## Folder structure
 ```
@@ -32,6 +34,7 @@ PulseBar/
 │  ├─ Models/       ← AppState, settings
 │  ├─ Utilities/
 │  └─ Assets/       ← icons, images
+├─ tests/PulseBar.Tests/  ← xUnit tests for pure logic (dotnet test --project tests/PulseBar.Tests -c Release)
 ├─ Scripts/
 ├─ .github/workflows/
 ├─ AGENTS.md
