@@ -5,8 +5,8 @@ using System.Net.NetworkInformation;
 namespace PulseBar.Services;
 
 /// <summary>
-/// আসল internet adapter গুলোর (Up, loopback/tunnel না, default gateway আছে)
-/// মোট download/upload speed বের করে। Adapter list শুধু network বদলালে নতুন করে পড়ে।
+/// Computes the total download/upload speed of the real internet adapters (Up, not
+/// loopback/tunnel, with a default gateway). The adapter list is reread only when the network changes.
 /// </summary>
 public sealed class NetworkMonitor : IDisposable
 {
@@ -24,8 +24,8 @@ public sealed class NetworkMonitor : IDisposable
     }
 
     /// <summary>
-    /// আগের ডাকের পর থেকে গড় speed (bytes/sec)। প্রথম ডাকে বা adapter বদলের পরে 0।
-    /// পড়তে না পারলে false।
+    /// Average speed (bytes/sec) since the previous call. 0 on the first call or after an adapter change.
+    /// False if it can't be read.
     /// </summary>
     public bool TryRead(out ulong downloadPerSec, out ulong uploadPerSec)
     {
@@ -58,13 +58,13 @@ public sealed class NetworkMonitor : IDisposable
                 }
                 catch
                 {
-                    // Adapter হঠাৎ চলে গেলে পরের network event এ list নতুন হবে
+                    // If an adapter suddenly disappears, the list is rebuilt on the next network event
                     continue;
                 }
 
                 if (_hasBaseline)
                 {
-                    // Counter reset হলে নতুন মান ছোট হয়, তখন 0 ধরা হবে
+                    // After a counter reset the new value is smaller, so it counts as 0
                     down += received >= _prevReceived[i] ? received - _prevReceived[i] : 0;
                     up += sent >= _prevSent[i] ? sent - _prevSent[i] : 0;
                 }
@@ -118,7 +118,7 @@ public sealed class NetworkMonitor : IDisposable
             }
             catch
             {
-                // এই adapter বাদ
+                // Skip this adapter
             }
         }
 

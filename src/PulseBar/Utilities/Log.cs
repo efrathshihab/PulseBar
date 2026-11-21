@@ -4,8 +4,8 @@ using System.Text;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// ছোট file log: %LocalAppData%\PulseBar\logs\pulsebar.log। ১ MB পেরোলে পুরনোটা .old হয়ে যায়।
-/// যেকোনো thread থেকে ডাকা যায়, আর লিখতে না পারলেও কখনো exception ছোড়ে না।
+/// Small file log: %LocalAppData%\PulseBar\logs\pulsebar.log. Past 1 MB the old one becomes .old.
+/// Can be called from any thread, and never throws even if it can't write.
 /// </summary>
 public static class Log
 {
@@ -55,7 +55,7 @@ public static class Log
             }
             catch
             {
-                // Log লিখতে না পারলে app থামবে না
+                // The app doesn't stop if the log can't be written
             }
         }
     }

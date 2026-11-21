@@ -10,10 +10,10 @@ public enum AppTheme
     Dark,
 }
 
-/// <summary>Taskbar overlay এ কয়টা মান।</summary>
+/// <summary>How many values the taskbar overlay shows.</summary>
 public enum OverlayLayout
 {
-    /// <summary>CPU + RAM, এক সারি।</summary>
+    /// <summary>CPU + RAM, one row.</summary>
     Compact,
 
     /// <summary>CPU, GPU, RAM, GPU temp, 2x2।</summary>
@@ -34,47 +34,47 @@ public enum LaunchAtLogin
     /// <summary>HKCU Run key।</summary>
     Normal,
 
-    /// <summary>Task Scheduler এর "Run with highest privileges" task।</summary>
+    /// <summary>A Task Scheduler task with "Run with highest privileges".</summary>
     WithAdmin,
 }
 
 /// <summary>
-/// User এর বদলানো যায় এমন setting। SettingsStore শুরুতে disk থেকে load করে আর বদলালে save করে।
-/// শুধু UI thread থেকে বদলাতে হবে; PropertyChanged ও তখন UI thread এই আসে।
+/// Settings the user can change. SettingsStore loads them from disk at startup and saves on change.
+/// Change only from the UI thread; PropertyChanged then also arrives on the UI thread.
 /// </summary>
 public sealed partial class AppSettings : ObservableObject
 {
     /// <summary>
-    /// Ctrl+Shift+V না, কারণ ওটা অনেক app এর "paste as plain text"।
+    /// Not Ctrl+Shift+V, because that's "paste as plain text" in many apps.
     /// </summary>
     public static readonly HotKey DefaultClipboardPanelHotKey = new(ModifierKeys.Control | ModifierKeys.Alt, Key.V);
 
-    /// <summary>Windows এর screen clip খোলার hotkey।</summary>
+    /// <summary>Hotkey that opens Windows' screen clip.</summary>
     public static readonly HotKey DefaultScreenshotHotKey = new(ModifierKeys.Control | ModifierKeys.Alt, Key.S);
 
     public static AppSettings Current { get; } = new();
 
-    /// <summary>Clipboard panel খোলার global hotkey।</summary>
+    /// <summary>Global hotkey that opens the clipboard panel.</summary>
     [ObservableProperty]
     public partial HotKey ClipboardPanelHotKey { get; set; } = DefaultClipboardPanelHotKey;
 
     /// <summary>
-    /// Panel এ Enter/click করলে copy এর পরে আগের window এ Ctrl+V পাঠিয়ে সরাসরি paste করবে কিনা।
-    /// বন্ধ থাকলে শুধু copy হয়।
+    /// Whether Enter/click in the panel, after copying, sends Ctrl+V to the previous window to paste directly.
+    /// When off, it only copies.
     /// </summary>
     [ObservableProperty]
     public partial bool AutoPaste { get; set; } = true;
 
-    /// <summary>Screenshot নেওয়ার global hotkey।</summary>
+    /// <summary>Global hotkey for taking a screenshot.</summary>
     [ObservableProperty]
     public partial HotKey ScreenshotHotKey { get; set; } = DefaultScreenshotHotKey;
 
-    /// <summary>Screenshots folder এ নতুন ছবি এলে history তে যোগ করবে কিনা।</summary>
+    /// <summary>Whether new images in the Screenshots folder are added to history.</summary>
     [ObservableProperty]
     public partial bool WatchScreenshotsFolder { get; set; } = true;
 
     /// <summary>
-    /// Screenshots folder এর নতুন ছবি clipboard এও দেবে কিনা, যাতে Win+PrtSc এর পরেই Ctrl+V করা যায়।
+    /// Whether new Screenshots folder images also go to the clipboard, so Ctrl+V works right after Win+PrtSc.
     /// </summary>
     [ObservableProperty]
     public partial bool AutoCopyScreenshots { get; set; } = true;
@@ -82,7 +82,7 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial AppTheme Theme { get; set; } = AppTheme.System;
 
-    /// <summary>Tray menu এর "Show on taskbar" এর সাথে একই মান।</summary>
+    /// <summary>The same value as the tray menu's "Show on taskbar".</summary>
     [ObservableProperty]
     public partial bool ShowTaskbarOverlay { get; set; } = true;
 
@@ -92,7 +92,7 @@ public sealed partial class AppSettings : ObservableObject
     [ObservableProperty]
     public partial ClipboardRetention ClipboardRetention { get; set; } = ClipboardRetention.TwentyFourHours;
 
-    /// <summary>বন্ধ থাকলে নতুন কিছু history তে ধরা হয় না; পুরনোগুলো থাকে।</summary>
+    /// <summary>When off, nothing new is captured into history; existing items stay.</summary>
     [ObservableProperty]
     public partial bool ClipboardEnabled { get; set; } = true;
 
@@ -107,8 +107,8 @@ public sealed partial class AppSettings : ObservableObject
     };
 
     /// <summary>
-    /// LaunchAtLogin আর hotkey ছাড়া সব default এ। Hotkey register আর login এর Run key/task এর
-    /// কাজ আছে, তাই ওগুলো যার যার service দিয়ে বদলাতে হয়।
+    /// Everything except LaunchAtLogin and hotkeys back to default. Hotkeys need registering and login needs
+    /// Run key/task work, so those are changed through their own services.
     /// </summary>
     public void ResetSimpleValues()
     {

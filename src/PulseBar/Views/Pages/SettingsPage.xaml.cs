@@ -23,7 +23,7 @@ public partial class SettingsPage : UserControl
         var dialog = new ContentDialog(host)
         {
             Title = "Reset to defaults?",
-            Content = "সব setting আর hotkey প্রথম অবস্থায় ফিরবে, launch at login বন্ধ হবে। Clipboard history মুছবে না।",
+            Content = "All settings and hotkeys return to their defaults and launch at login turns off. Clipboard history is kept.",
             PrimaryButtonText = "Reset",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,

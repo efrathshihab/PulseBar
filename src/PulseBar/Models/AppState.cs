@@ -1,8 +1,8 @@
 namespace PulseBar.Models;
 
 /// <summary>
-/// App জুড়ে একটাই shared state। SystemMonitor এখানে snapshot লেখে,
-/// ViewModel আর tray icon এখান থেকে পড়ে।
+/// The single app-wide shared state. SystemMonitor writes snapshots here,
+/// and ViewModels and the tray icon read from it.
 /// </summary>
 public sealed class AppState
 {
@@ -16,10 +16,10 @@ public sealed class AppState
     {
     }
 
-    /// <summary>সর্বশেষ snapshot। প্রতি সেকেন্ডে background thread থেকে বদলায়।</summary>
+    /// <summary>The latest snapshot. Changes every second from a background thread.</summary>
     public SystemSnapshot? Snapshot => _snapshot;
 
-    /// <summary>Popup এখন খোলা কিনা। শুধু UI thread থেকে বদলায়।</summary>
+    /// <summary>Whether the popup is open now. Changed only from the UI thread.</summary>
     public bool IsPopupVisible
     {
         get => _isPopupVisible;
@@ -35,7 +35,7 @@ public sealed class AppState
         }
     }
 
-    /// <summary>Hotkey এর clipboard panel এখন খোলা কিনা। শুধু UI thread থেকে বদলায়।</summary>
+    /// <summary>Whether the hotkey clipboard panel is open now. Changed only from the UI thread.</summary>
     public bool IsClipboardPanelVisible
     {
         get => _isClipboardPanelVisible;
@@ -51,13 +51,13 @@ public sealed class AppState
         }
     }
 
-    /// <summary>নতুন snapshot এলে, background thread থেকে।</summary>
+    /// <summary>Raised when a new snapshot arrives, from a background thread.</summary>
     public event EventHandler<SystemSnapshot>? SnapshotUpdated;
 
-    /// <summary>Popup খুললে বা লুকালে, UI thread থেকে।</summary>
+    /// <summary>Raised when the popup opens or hides, from the UI thread.</summary>
     public event EventHandler<bool>? PopupVisibilityChanged;
 
-    /// <summary>Clipboard panel খুললে বা লুকালে, UI thread থেকে।</summary>
+    /// <summary>Raised when the clipboard panel opens or hides, from the UI thread.</summary>
     public event EventHandler<bool>? ClipboardPanelVisibilityChanged;
 
     public void UpdateSnapshot(SystemSnapshot snapshot)
@@ -78,7 +78,7 @@ public sealed class AppState
             }
             catch
             {
-                // একজন subscriber এর ভুলে বাকিরা বা monitor থামবে না
+                // One subscriber's error doesn't stop the others or the monitor
             }
         }
     }

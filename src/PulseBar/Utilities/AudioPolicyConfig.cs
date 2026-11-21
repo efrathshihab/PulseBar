@@ -3,16 +3,16 @@ using System.Runtime.InteropServices;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Windows এর undocumented IPolicyConfig দিয়ে default output device বদলানো (Sound settings যা করে)।
+/// Changes the default output device through Windows' undocumented IPolicyConfig (what Sound settings does).
 /// </summary>
 /// <remarks>
-/// Interface টা public না, তাই ভবিষ্যতের Windows update এ বদলাতে পারে। তখন কোনো exception বাইরে
-/// যায় না; <see cref="TrySetDefaultEndpoint"/> false আর কারণ ফেরত দেয়।
-/// Windows 7 থেকে IPolicyConfig, না পেলে Vista র পুরনো IPolicyConfigVista চেষ্টা করা হয়।
+/// The interface isn't public, so a future Windows update may change it. No exception escapes then;
+/// <see cref="TrySetDefaultEndpoint"/> returns false and the reason.
+/// IPolicyConfig from Windows 7 on; if missing, the older Vista IPolicyConfigVista is tried.
 /// </remarks>
 internal static class AudioPolicyConfig
 {
-    // ERole: eConsole, eMultimedia, eCommunications; তিনটাই বসানো হয়, যেমন Windows নিজে করে
+    // ERole: eConsole, eMultimedia, eCommunications; all three are set, as Windows itself does
     private static readonly int[] Roles = [0, 1, 2];
 
     public static bool TrySetDefaultEndpoint(string deviceId, out string? error)
@@ -51,7 +51,7 @@ internal static class AudioPolicyConfig
         }
         catch (Exception ex)
         {
-            // Class নেই (REGDB_E_CLASSNOTREG), interface বদলেছে ইত্যাদি
+            // Class missing (REGDB_E_CLASSNOTREG), interface changed and so on
             error = $"{ex.GetType().Name}: {ex.Message}";
             return false;
         }
@@ -70,7 +70,7 @@ internal static class AudioPolicyConfig
     {
     }
 
-    /// <summary>Windows 7 থেকে। Method এর ক্রম vtable এর সাথে মিলতে হবে; বাকিগুলো ব্যবহার হয় না।</summary>
+    /// <summary>Windows 7 and later. Method order must match the vtable; the rest are unused.</summary>
     [ComImport]
     [Guid("f8679f50-850a-41cf-9c72-430f290290c8")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -101,7 +101,7 @@ internal static class AudioPolicyConfig
         [PreserveSig] int SetEndpointVisibility([MarshalAs(UnmanagedType.LPWStr)] string deviceId, int visible);
     }
 
-    /// <summary>Vista র সংস্করণ: ResetDeviceFormat নেই।</summary>
+    /// <summary>The Vista version: no ResetDeviceFormat.</summary>
     [ComImport]
     [Guid("568b9108-44bf-40b4-9006-86afe5b5a620")]
     [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]

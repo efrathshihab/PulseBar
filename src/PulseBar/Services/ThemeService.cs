@@ -8,8 +8,8 @@ using Wpf.Ui.Controls;
 namespace PulseBar.Services;
 
 /// <summary>
-/// App এর theme: System হলে Windows এর app theme অনুসরণ করে (SystemThemeWatcher), Light/Dark হলে
-/// সেটাই বসায়। নিবন্ধিত সব window এর Mica সাথে সাথে নতুন রঙে যায়। শুধু UI thread থেকে।
+/// The app theme: System follows Windows' app theme (SystemThemeWatcher), Light/Dark
+/// applies that theme. The Mica of all registered windows switches color right away. UI thread only.
 /// </summary>
 public sealed class ThemeService
 {
@@ -18,7 +18,7 @@ public sealed class ThemeService
 
     public AppTheme Theme { get; private set; } = AppTheme.System;
 
-    /// <summary>যে window গুলোর রং theme এর সাথে বদলাবে।</summary>
+    /// <summary>Windows whose colors change with the theme.</summary>
     public void Register(Window window)
     {
         _windows.Add(window);
@@ -81,7 +81,7 @@ public sealed class ThemeService
 
     private static void UpdateBackground(Window window)
     {
-        // Handle না থাকলে প্রথম Show এর সময় FluentWindow নিজেই এখনকার theme নেয়
+        // Without a handle, FluentWindow picks up the current theme itself on first Show
         if (new WindowInteropHelper(window).Handle == IntPtr.Zero)
         {
             return;

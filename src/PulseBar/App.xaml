@@ -7,7 +7,7 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Startup এ App.xaml.cs থেকে settings এর theme (System/Light/Dark) বসানো হয় -->
+                <!-- At startup App.xaml.cs applies the theme from settings (System/Light/Dark) -->
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>

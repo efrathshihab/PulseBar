@@ -16,10 +16,10 @@ namespace PulseBar;
 
 public partial class App : Application
 {
-    // একেকটা ধাপ এর বেশি সময় নিলে সেটা বাদ দিয়ে পরেরটায় যাওয়া হয়
+    // If one step takes longer than this, it is skipped and the next one runs
     private static readonly TimeSpan StepTimeout = TimeSpan.FromSeconds(2);
 
-    // Quit চাপার পর সব মিলিয়ে এর মধ্যে বন্ধ না হলে জোর করে বন্ধ
+    // If PulseBar hasn't exited this long after Quit, it is forced to exit
     private static readonly TimeSpan ExitDeadline = TimeSpan.FromSeconds(5);
 
     private TaskbarIcon? _trayIcon;
@@ -45,7 +45,7 @@ public partial class App : Application
     private int _quitRequested;
     private bool _capturing;
 
-    // Popup/panel/menu লুকানোর পরে Windows এর fade animation শেষ হওয়ার অপেক্ষা, যাতে ছবিতে না আসে
+    // After hiding the popup/panel/menu, wait for Windows' fade animation so it doesn't show up in the image
     private static readonly TimeSpan HideBeforeCaptureDelay = TimeSpan.FromMilliseconds(200);
 
     protected override void OnStartup(StartupEventArgs e)
@@ -56,7 +56,7 @@ public partial class App : Application
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Log.Error("Unhandled exception", args.ExceptionObject as Exception);
 
-        // Launch at login এর "With admin": UAC এর পরে admin হিসেবে চলা helper, শুধু task বানিয়ে/মুছে বন্ধ
+        // "With admin" launch at login: the helper running as admin after UAC only creates/deletes the task and exits
         if (StartupManager.IsHelperInvocation(e.Args))
         {
             Log.Info($"Startup task helper ({e.Args[0]}, PID {Environment.ProcessId})");
@@ -70,9 +70,9 @@ public partial class App : Application
         Log.Info($"Starting PulseBar (PID {Environment.ProcessId}, {BuildInfo.DevLabel ?? "release"}" +
             $"{(atLogin ? ", at login" : "")}{(StartupManager.IsElevated ? ", admin" : "")})");
 
-        // একসাথে একটাই PulseBar। Release: আগেরটার popup খুলে এটা বন্ধ হবে।
-        // Debug: আগেরটাকে বন্ধ করে এটা চলবে, যাতে dotnet run দিলে সবসময় সর্বশেষ code চলে।
-        // Login এ চালু হলে কিছু খোলে না: আগে থেকে চললে চুপচাপ বন্ধ।
+        // Only one PulseBar at a time. Release: shows the running one's popup and this one exits.
+        // Debug: closes the running one and this one runs, so dotnet run always runs the latest code.
+        // Started at login: nothing opens; if one is already running, exit quietly.
         _singleInstance = SingleInstance.TryAcquire(replaceExisting: BuildInfo.IsDebug && !atLogin, activateExisting: !atLogin);
         if (_singleInstance is null)
         {
@@ -81,14 +81,14 @@ public partial class App : Application
             return;
         }
 
-        // Settings সবার আগে, যাতে theme, hotkey, overlay প্রথম থেকেই ঠিক মানে চালু হয়
+        // Settings first, so theme, hotkeys and overlay start with the right values from the beginning
         var settings = AppSettings.Current;
         _settingsStore = new SettingsStore();
         var loaded = _settingsStore.Load(settings);
         _startupManager = new StartupManager(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "PulseBar.exe"));
         if (!loaded.HasLaunchAtLogin)
         {
-            // প্রথমবার বা file নষ্ট ছিল: Run key/task এ যা আছে সেটাই মেনে নেওয়া, কিছু মোছা হয় না
+            // First run or the file was corrupt: accept whatever the Run key/task has; nothing is deleted
             settings.LaunchAtLogin = _startupManager.Detect();
         }
 
@@ -105,12 +105,12 @@ public partial class App : Application
         var state = AppState.Current;
         _overviewViewModel = new OverviewViewModel(state, Dispatcher, () => TakeScreenshot("Overview button"));
 
-        // Output device, master আর per-app volume: নিজস্ব audio thread এ চলে; popup লুকানো থাকলে UI update হয় না
+        // Output device, master and per-app volume: runs on its own audio thread; no UI updates while the popup is hidden
         _audioController = new AudioController();
         _soundViewModel = new SoundViewModel(_audioController, state, Dispatcher);
         _audioController.Start();
 
-        // Clipboard history: শুরু থেকেই শোনে, history background এ load হয়
+        // Clipboard history: listens from the start, history loads in the background
         _clipboardManager = new ClipboardManager(new ClipboardStorage())
         {
             Retention = AppSettings.ToTimeSpan(settings.ClipboardRetention),
@@ -119,29 +119,29 @@ public partial class App : Application
         _clipboardViewModel = new ClipboardViewModel(_clipboardManager, state, Dispatcher);
         _clipboardManager.Start();
 
-        // Screenshots folder এর নতুন ছবি: PulseBar এর নিজের copy history তে, দরকার হলে clipboard এও।
-        // User এর folder এর file শুধু পড়া হয়, কখনো বদলানো হয় না।
+        // New Screenshots folder images: PulseBar's own copy goes to history, and to the clipboard if needed.
+        // Files in the user's folder are only read, never changed.
         var clipboardManager = _clipboardManager;
         _screenshotWatcher = new ScreenshotWatcher((data, _) => settings.ClipboardEnabled
             ? clipboardManager.AddScreenshotAsync(data, "Screenshots folder", settings.AutoCopyScreenshots)
             : Task.CompletedTask);
         _screenshotWatcher.IsEnabled = settings.WatchScreenshotsFolder && settings.ClipboardEnabled;
 
-        // Hotkey register হয় tray icon এর পরে (fail হলে tray থেকে জানানোর জন্য); Settings tab এর জন্য আগেই বানানো
+        // Hotkeys are registered after the tray icon (so failures can be reported from the tray); created earlier for the Settings tab
         _hotKeys = new HotKeyManager();
         _hotKeyBindings = new HotKeyBindings(_hotKeys, settings);
         _settingsViewModel = new SettingsViewModel(settings, _hotKeyBindings, _startupManager,
             message => Notify(message, H.NotifyIcon.Core.NotificationIcon.Warning));
 
-        // Popup একবারই বানানো হয়; পরে শুধু Hide/Show
+        // The popup is created once; after that only Hide/Show
         _popup = new PopupWindow(_overviewViewModel, _soundViewModel, _clipboardViewModel, _settingsViewModel);
         _theme.Register(_popup);
 
-        // Hotkey এর clipboard panel: একই ClipboardViewModel; এটাও একবারই বানানো হয়
+        // The hotkey clipboard panel: the same ClipboardViewModel; also created only once
         _clipboardPanel = new ClipboardPanel(_clipboardViewModel, new PasteService(), settings);
         _theme.Register(_clipboardPanel);
 
-        // Popup আর panel একসাথে খোলা থাকবে না
+        // The popup and the panel are never open at the same time
         state.PopupVisibilityChanged += (_, visible) =>
         {
             if (visible)
@@ -167,9 +167,9 @@ public partial class App : Application
             Log.Info("Tray: left click");
             _popup.Toggle();
         };
-        // Popup খোলা অবস্থায় menu খুললে, menu এর জন্য foreground বদলানোয় popup Deactivated হয়ে লুকায়,
-        // আর active window লুকানোয় WPF ContextMenu এর mouse capture চলে গিয়ে menu সাথে সাথে
-        // (~২০ ms এ) বন্ধ হয়ে যায়; তখন Quit এ click আর পৌঁছায় না। তাই menu খোলার আগেই popup লুকানো।
+        // Opening the menu while the popup is open changes the foreground for the menu, so the popup is deactivated and hides,
+        // and hiding the active window drops the WPF ContextMenu's mouse capture, closing the menu right away
+        // (in ~20 ms); a click on Quit then never arrives. So the popup is hidden before the menu opens.
         _trayIcon.TrayRightMouseDown += (_, _) => _popup.HidePopup();
         _trayIcon.PreviewTrayContextMenuOpen += (_, _) =>
         {
@@ -178,7 +178,7 @@ public partial class App : Application
         };
         if (_trayIcon.ContextMenu is { } menu)
         {
-            // Quit না হলে কোথায় হারাল বোঝার জন্য
+            // To find out where it got lost when Quit doesn't work
             menu.Opened += (_, _) => Log.Info("Tray menu: opened");
             menu.Closed += (_, _) => Log.Info("Tray menu: closed");
             menu.PreviewMouseDown += (_, args) =>
@@ -193,7 +193,7 @@ public partial class App : Application
         BindHotKey(HotKeyAction.Screenshot, () => TakeScreenshot("hotkey"));
         _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, _audioController, Dispatcher);
 
-        // Tray এর ^ arrow এর বাম পাশে taskbar এর উপর live মান; click করলে tray icon এর মতোই popup
+        // Live values on the taskbar, left of the tray's ^ arrow; clicking opens the popup like the tray icon
         _taskbarOverlay = new TaskbarOverlayHost(state, Dispatcher);
         _taskbarOverlay.Clicked += (_, _) =>
         {
@@ -203,19 +203,19 @@ public partial class App : Application
         _taskbarOverlay.Layout = settings.OverlayLayout;
         _taskbarOverlay.IsEnabled = settings.ShowTaskbarOverlay;
 
-        // Settings tab বা tray menu থেকে বদল সাথে সাথে কাজ করবে
+        // Changes from the Settings tab or the tray menu take effect right away
         settings.PropertyChanged += OnSettingChanged;
 
-        // SystemMonitor সবসময় চলবে, কারণ tray icon এ CPU % দেখায়
+        // SystemMonitor always runs, because the tray icon shows CPU %
         _systemMonitor = new SystemMonitor(state);
         _systemMonitor.Start();
 
         Log.Info("Started");
 
-        // Startup শেষ হলে, যাতে প্রথম hotkey তেও panel দ্রুত খোলে
+        // After startup finishes, so the panel opens quickly even on the first hotkey
         Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _clipboardPanel?.Prewarm());
 
-        // Run key বা task এখনকার exe চালায় কিনা (installer এ path বদলাতে পারে); background এ
+        // Whether the Run key or task runs the current exe (the installer may change the path); in the background
         var startupManager = _startupManager;
         var launchMode = settings.LaunchAtLogin;
         Task.Run(() => startupManager.Verify(launchMode)).ContinueWith(
@@ -224,8 +224,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Global hotkey। অন্য app আগে থেকে নিয়ে রাখলে crash না করে tray থেকে জানায়;
-    /// tray menu বা popup তখনও কাজ করে, আর Settings এ লাল লেখা দেখায়।
+    /// Global hotkey. If another app already holds it, reports it from the tray instead of crashing;
+    /// the tray menu and popup still work, and Settings shows a red message.
     /// </summary>
     private void BindHotKey(HotKeyAction action, Action callback)
     {
@@ -234,10 +234,10 @@ public partial class App : Application
             return;
         }
 
-        Notify($"{_hotKeyBindings.Get(action).DisplayText} অন্য app ব্যবহার করছে", H.NotifyIcon.Core.NotificationIcon.Warning);
+        Notify($"{_hotKeyBindings.Get(action).DisplayText} is used by another app", H.NotifyIcon.Core.NotificationIcon.Warning);
     }
 
-    /// <summary>Settings বদলালে সংশ্লিষ্ট service এ সাথে সাথে বসানো। UI thread এ আসে।</summary>
+    /// <summary>When settings change, applies them to the related services right away. Arrives on the UI thread.</summary>
     private void OnSettingChanged(object? sender, PropertyChangedEventArgs e)
     {
         var settings = AppSettings.Current;
@@ -283,9 +283,9 @@ public partial class App : Application
     private void TakeScreenshot_Click(object sender, RoutedEventArgs e) => TakeScreenshot("tray menu");
 
     /// <summary>
-    /// Windows এর screen clip খোলে (ফল clipboard এ আসে, listener নিজেই ধরে)। আগে popup আর panel
-    /// লুকায়, যাতে ছবিতে PulseBar না আসে। Snipping Tool না থাকলে mouse এর monitor এর পুরো screen
-    /// নিয়ে history আর clipboard এ দেয়।
+    /// Opens Windows' screen clip (the result lands on the clipboard and the listener picks it up). Hides the popup
+    /// and panel first so PulseBar isn't in the image. Without Snipping Tool, captures the whole screen of the
+    /// mouse's monitor and adds it to history and the clipboard.
     /// </summary>
     private async void TakeScreenshot(string trigger)
     {
@@ -310,12 +310,12 @@ public partial class App : Application
             byte[]? png = await Task.Run(ScreenCapture.CaptureCursorMonitorPng);
             if (png is null)
             {
-                Notify("Screenshot নেওয়া যায়নি", H.NotifyIcon.Core.NotificationIcon.Error);
+                Notify("Couldn't take a screenshot", H.NotifyIcon.Core.NotificationIcon.Error);
                 return;
             }
 
-            // নিজে নেওয়া ছবি: AutoCopyScreenshots যাই হোক, clipboard এ দেওয়া হয়।
-            // History বন্ধ থাকলে শুধু clipboard এ।
+            // Our own capture: goes to the clipboard regardless of AutoCopyScreenshots.
+            // With history off, only to the clipboard.
             if (AppSettings.Current.ClipboardEnabled)
             {
                 await manager.AddScreenshotAsync(png, "PulseBar", copyToClipboard: true);
@@ -325,7 +325,7 @@ public partial class App : Application
                 CopyPngToClipboard(png);
             }
 
-            Notify("Snipping Tool পাওয়া যায়নি, পুরো screen নেওয়া হয়েছে", H.NotifyIcon.Core.NotificationIcon.Info);
+            Notify("Snipping Tool not found, captured the full screen", H.NotifyIcon.Core.NotificationIcon.Info);
         }
         catch (Exception ex)
         {
@@ -353,7 +353,7 @@ public partial class App : Application
 
     private void ShowOnTaskbar_Click(object sender, RoutedEventArgs e)
     {
-        // Setting বদলালে OnSettingChanged overlay চালু/বন্ধ করে আর save হয়
+        // Changing the setting makes OnSettingChanged toggle the overlay and save
         if (sender is MenuItem item)
         {
             AppSettings.Current.ShowTaskbarOverlay = item.IsChecked;
@@ -381,8 +381,8 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// বন্ধ শুরু করে, আর একটা watchdog চালু করে: <see cref="ExitDeadline"/> এর মধ্যে process
-    /// শেষ না হলে log এ লিখে Environment.Exit(0)।
+    /// Starts shutting down and starts a watchdog: if the process hasn't ended within <see cref="ExitDeadline"/>,
+    /// it logs and calls Environment.Exit(0).
     /// </summary>
     private void RequestQuit(string reason)
     {
@@ -401,7 +401,7 @@ public partial class App : Application
             Environment.Exit(0);
         })
         {
-            IsBackground = true, // স্বাভাবিকভাবে বন্ধ হলে এটা process কে ধরে রাখবে না
+            IsBackground = true, // won't keep the process alive on a normal exit
             Name = "PulseBar exit watchdog",
         };
         watchdog.Start();
@@ -422,26 +422,26 @@ public partial class App : Application
         Log.Info("OnExit: shutting down");
         var total = Stopwatch.StartNew();
 
-        // Background এ চলে, তাই আটকে গেলে ২ সেকেন্ড পরে বাদ দেওয়া যায়
-        // (PDH, LibreHardwareMonitor এর Computer.Close, monitor এর loop)
+        // Runs in the background, so if it hangs it can be skipped after 2 seconds
+        // (PDH, LibreHardwareMonitor's Computer.Close, the monitor loop)
         RunStep("SystemMonitor", () => _systemMonitor?.Dispose(), offUiThread: true);
 
-        // বাকিগুলো UI thread এর window/HwndSource ছোঁয়, তাই UI thread এই; সময় মেপে log
+        // The rest touch UI-thread windows/HwndSources, so they run on the UI thread; timed and logged
         RunStep("TrayIconUpdater", () => _trayIconUpdater?.Dispose());
         RunStep("TaskbarOverlay", () => _taskbarOverlay?.Dispose());
         RunStep("OverviewViewModel", () => _overviewViewModel?.Dispose());
         RunStep("SoundViewModel", () => _soundViewModel?.Dispose());
-        RunStep("AudioController", () => _audioController?.Dispose(), offUiThread: true); // COM ছাড়া, thread (২ সেকেন্ড)
+        RunStep("AudioController", () => _audioController?.Dispose(), offUiThread: true); // releases COM, thread (2 seconds)
         RunStep("SettingsViewModel", () => _settingsViewModel?.Dispose());
         RunStep("HotKeyBindings", () => _hotKeyBindings?.Dispose());
         RunStep("HotKeys", () => _hotKeys?.Dispose());
         RunStep("ClipboardPanel", () => _clipboardPanel?.CloseForShutdown());
         RunStep("ClipboardViewModel", () => _clipboardViewModel?.Dispose());
         RunStep("ScreenshotWatcher", () => _screenshotWatcher?.Dispose());
-        RunStep("ClipboardManager", () => _clipboardManager?.Dispose()); // listener, worker (২ সেকেন্ড), শেষ save
+        RunStep("ClipboardManager", () => _clipboardManager?.Dispose()); // listener, worker (2 seconds), final save
         RunStep("Popup", () => _popup?.CloseForShutdown());
         RunStep("TrayIcon", () => _trayIcon?.Dispose());
-        RunStep("SettingsStore", () => _settingsStore?.Dispose()); // বাকি থাকা save লেখা
+        RunStep("SettingsStore", () => _settingsStore?.Dispose()); // writes any pending save
         RunStep("SingleInstance", () => _singleInstance?.Dispose());
 
         Log.Info($"OnExit: done in {total.ElapsedMilliseconds} ms");
@@ -479,7 +479,7 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            // একটা ধাপ fail করলেও বাকিগুলো চলবে
+            // Even if one step fails, the rest still run
             Log.Error($"Shutdown: {name} failed", (ex as AggregateException)?.InnerException ?? ex);
         }
     }

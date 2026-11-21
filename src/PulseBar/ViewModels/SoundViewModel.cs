@@ -8,8 +8,8 @@ using PulseBar.Services;
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// Sound tab: output device বাছাই, master volume, আর per-app volume/mute। Popup লুকানো থাকলে UI
-/// কিছুই বদলায় না; controller এর event শুধু "বদলেছে" চিহ্ন দেয়, popup খুললে তখন সব মেলানো হয়।
+/// Sound tab: output device selection, master volume and per-app volume/mute. While the popup is hidden the UI
+/// changes nothing; controller events only set a "changed" flag, and everything is reconciled when the popup opens.
 /// </summary>
 public sealed partial class SoundViewModel : ObservableObject, IDisposable
 {
@@ -46,32 +46,32 @@ public sealed partial class SoundViewModel : ObservableObject, IDisposable
 
     public MasterVolumeViewModel Master { get; }
 
-    /// <summary>সব Active output device, নাম অনুযায়ী।</summary>
+    /// <summary>All active output devices, by name.</summary>
     public ObservableCollection<AudioOutputDevice> Devices { get; } = [];
 
-    /// <summary>এখনকার default device; না থাকলে null।</summary>
+    /// <summary>The current default device; null if none.</summary>
     [ObservableProperty]
     public partial AudioOutputDevice? CurrentDevice { get; set; }
 
-    /// <summary>কোনো output device নেই: master আর apps অংশ লুকানো।</summary>
+    /// <summary>No output device: the master and apps sections are hidden.</summary>
     [ObservableProperty]
     public partial bool HasDevices { get; set; }
 
-    /// <summary>Master volume পড়া গেছে।</summary>
+    /// <summary>Master volume could be read.</summary>
     [ObservableProperty]
     public partial bool HasMaster { get; set; }
 
     [ObservableProperty]
     public partial bool IsDeviceListOpen { get; set; }
 
-    /// <summary>"Device বদলানো যায়নি", কয়েক সেকেন্ড।</summary>
+    /// <summary>"Couldn't switch device", for a few seconds.</summary>
     [ObservableProperty]
     public partial bool IsSwitchErrorVisible { get; set; }
 
-    /// <summary>আগে System sounds, তারপর নাম অনুযায়ী।</summary>
+    /// <summary>System sounds first, then by name.</summary>
     public ObservableCollection<AudioAppViewModel> Apps { get; } = [];
 
-    /// <summary>System sounds ছাড়া কোনো app নেই।</summary>
+    /// <summary>No apps other than System sounds.</summary>
     [ObservableProperty]
     public partial bool IsEmptyVisible { get; set; } = true;
 
@@ -111,7 +111,7 @@ public sealed partial class SoundViewModel : ObservableObject, IDisposable
 
     private void OnAudioChanged(object? sender, EventArgs e)
     {
-        // Audio thread থেকে; একবারই UI thread এ পাঠানো হয়
+        // From the audio thread; posted to the UI thread only once
         if (Interlocked.Exchange(ref _dirty, 1) == 0 && _state.IsPopupVisible)
         {
             _dispatcher.BeginInvoke(DispatcherPriority.Background, SyncIfDirty);
@@ -172,14 +172,14 @@ public sealed partial class SoundViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // Default device বদলালে নতুন device এর মান সাথে সাথে, user এর টানা বাকি থাকলেও
+        // When the default device changes, the new device's values apply right away, even mid-drag
         string? deviceId = CurrentDevice?.Id;
         bool deviceChanged = deviceId != _currentDeviceId;
         _currentDeviceId = deviceId;
         Master.Apply(master, force: deviceChanged);
     }
 
-    /// <summary>পুরনো row এর ViewModel আবার ব্যবহার করে শুধু Move/Insert/Remove, যাতে slider না হারায়।</summary>
+    /// <summary>Reuses old row ViewModels with only Move/Insert/Remove, so sliders aren't lost.</summary>
     private void Sync(IReadOnlyList<AudioAppSession> apps)
     {
         var target = new List<AudioAppViewModel>(apps.Count);

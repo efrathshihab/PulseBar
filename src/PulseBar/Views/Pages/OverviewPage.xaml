@@ -11,7 +11,7 @@
              d:DataContext="{d:DesignInstance Type=vm:OverviewViewModel}">
     <DockPanel Margin="4,12,4,4" LastChildFill="True">
 
-        <!-- নিচে Screenshot button; উপরের অংশ বড় হলেও button দেখা যায় -->
+        <!-- Screenshot button at the bottom; stays visible even if the top part grows -->
         <ui:Button DockPanel.Dock="Bottom"
                    HorizontalAlignment="Center"
                    Margin="0,4,0,0"
@@ -24,7 +24,7 @@
 
         <StackPanel>
 
-            <!-- 3x2 gauge: উপরে CPU, GPU, RAM; নিচে Disk, CPU Temp, GPU Temp -->
+            <!-- 3x2 gauges: CPU, GPU, RAM on top; Disk, CPU Temp, GPU Temp below -->
             <UniformGrid Columns="3" Rows="2">
                 <UniformGrid.Resources>
                     <Style TargetType="controls:RingGauge">
@@ -76,7 +76,7 @@
                 </Grid>
             </ui:Card>
 
-            <!-- বাকি drive -->
+            <!-- Other drives -->
             <ItemsControl ItemsSource="{Binding OtherDrives}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:DriveItem}">
@@ -96,7 +96,7 @@
                                          Maximum="100"
                                          Value="{Binding Percent, Mode=OneWay}" />
                         </StackPanel>
-                        <!-- Gauge এর মতোই threshold: 60% এর বেশি amber, 85% এর বেশি লাল -->
+                        <!-- Same thresholds as the gauges: amber above 60%, red above 85% -->
                         <DataTemplate.Triggers>
                             <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Warning}">
                                 <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.AmberBrush}" />

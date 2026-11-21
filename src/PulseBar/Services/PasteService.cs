@@ -5,12 +5,12 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Clipboard panel এর paste: panel খোলার আগে সামনে থাকা window মনে রাখে, পরে সেখানে focus
-/// ফিরিয়ে SendInput দিয়ে Ctrl+V পাঠায়। UI thread থেকে ডাকতে হবে।
+/// Paste for the clipboard panel: remembers the window in front before the panel opens, then returns
+/// focus there and sends Ctrl+V with SendInput. Must be called from the UI thread.
 /// </summary>
 /// <remarks>
-/// Windows (UIPI) কম integrity এর process থেকে বেশি integrity এর window এ SendInput আটকে দেয়,
-/// আর SendInput এর ফলাফলে সেটা বোঝা যায় না। তাই আগেই দুই process এর integrity level মেলানো হয়।
+/// Windows (UIPI) blocks SendInput from a lower-integrity process to a higher-integrity window,
+/// and SendInput's result doesn't reveal it. So the two processes' integrity levels are compared first.
 /// </remarks>
 public sealed class PasteService
 {
@@ -19,7 +19,7 @@ public sealed class PasteService
     private readonly int _ownIntegrity = IntegrityOf(Environment.ProcessId) ?? SECURITY_MANDATORY_MEDIUM_RID;
     private IntPtr _target;
 
-    /// <summary>এখন সামনে থাকা window মনে রাখে; সেটা PulseBar এর নিজের হলে কিছুই মনে রাখে না।</summary>
+    /// <summary>Remembers the window in front now; remembers nothing if it's PulseBar's own.</summary>
     public void RememberTarget()
     {
         var hwnd = GetForegroundWindow();
@@ -29,8 +29,8 @@ public sealed class PasteService
     public bool HasTarget => _target != IntPtr.Zero && IsWindow(_target);
 
     /// <summary>
-    /// আগের window টা PulseBar এর চেয়ে বেশি integrity তে (যেমন admin হিসেবে) চলছে, তাই Ctrl+V
-    /// পাঠানো যাবে না। Integrity পড়া না গেলেও (protected process ইত্যাদি) true।
+    /// The previous window runs at a higher integrity than PulseBar (e.g. as admin), so Ctrl+V
+    /// can't be sent. Also true when the integrity can't be read (protected processes and the like).
     /// </summary>
     public bool IsTargetBlocked()
     {
@@ -43,7 +43,7 @@ public sealed class PasteService
         return integrity is null || integrity > _ownIntegrity;
     }
 
-    /// <summary>আগের window কে আবার সামনে আনে। এর আগে PulseBar এর নিজের user input পেতে হবে।</summary>
+    /// <summary>Brings the previous window back to the front. PulseBar must have received user input before this.</summary>
     public void RestoreFocus()
     {
         if (HasTarget)
@@ -58,8 +58,8 @@ public sealed class PasteService
     }
 
     /// <summary>
-    /// আগের window সামনে আসা পর্যন্ত (সর্বোচ্চ ৩০০ ms) অপেক্ষা করে Ctrl+V পাঠায়। অন্য window সামনে
-    /// থাকলে পাঠায় না, যাতে ভুল জায়গায় paste না হয়। সফল হলে true।
+    /// Waits (up to 300 ms) for the previous window to come to the front, then sends Ctrl+V. Doesn't send if
+    /// another window is in front, so nothing is pasted in the wrong place. True on success.
     /// </summary>
     public async Task<bool> PasteAsync()
     {
@@ -113,7 +113,7 @@ public sealed class PasteService
         return (int)pid;
     }
 
-    /// <summary>Process এর mandatory integrity RID (Medium = 0x2000, High = 0x3000); না পারলে null।</summary>
+    /// <summary>The process's mandatory integrity RID (Medium = 0x2000, High = 0x3000); null on failure.</summary>
     private static int? IntegrityOf(int processId)
     {
         IntPtr process = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, (uint)processId);
@@ -143,7 +143,7 @@ public sealed class PasteService
                 return null;
             }
 
-            // TOKEN_MANDATORY_LABEL এর প্রথম field SID এর pointer; শেষ sub-authority টাই level
+            // The first field of TOKEN_MANDATORY_LABEL points to the SID; the last sub-authority is the level
             IntPtr sid = Marshal.ReadIntPtr(buffer);
             int count = Marshal.ReadByte(GetSidSubAuthorityCount(sid));
             return Marshal.ReadInt32(GetSidSubAuthority(sid, (uint)(count - 1)));
@@ -185,7 +185,7 @@ public sealed class PasteService
         public InputUnion u;
     }
 
-    // MOUSEINPUT সবচেয়ে বড়, তাই union এর মাপ ঠিক রাখতে সেটাও রাখা হয়
+    // MOUSEINPUT is the largest, so it's kept to get the union size right
     [StructLayout(LayoutKind.Explicit)]
     private struct InputUnion
     {

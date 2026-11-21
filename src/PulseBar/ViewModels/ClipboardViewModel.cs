@@ -15,9 +15,9 @@ public enum ClipboardFilter
 }
 
 /// <summary>
-/// Clipboard tab আর hotkey এর clipboard panel দুটোই এটা ব্যবহার করে (একসাথে একটাই খোলা থাকে):
-/// filter, search, copy, delete, clear all। দুটোই লুকানো থাকলে কিছুই update করে না আর কোনো
-/// timer চালায় না; খুললে তখন list মেলায়।
+/// Used by both the Clipboard tab and the hotkey clipboard panel (only one is open at a time):
+/// filter, search, copy, delete, clear all. While both are hidden it updates nothing and runs no
+/// timers; it reconciles the list when one opens.
 /// </summary>
 public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
 {
@@ -36,7 +36,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     private int _dirty = 1;
     private bool _shown;
 
-    /// <summary>Filter আর search এর পরে যা দেখা যাবে, নতুনটা আগে।</summary>
+    /// <summary>What is shown after filter and search, newest first.</summary>
     public ObservableCollection<ClipboardItemViewModel> Items { get; } = [];
 
     [ObservableProperty]
@@ -54,15 +54,15 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial bool IsEmptyVisible { get; set; } = true;
 
-    /// <summary>History খালি হলে true (clipboard icon), search এ না মিললে false (search icon)।</summary>
+    /// <summary>True when history is empty (clipboard icon), false when search has no match (search icon).</summary>
     [ObservableProperty]
     public partial bool IsHistoryEmpty { get; set; } = true;
 
     [ObservableProperty]
     public partial string EmptyMessage { get; set; } = NothingCopied;
 
-    private const string NothingCopied = "এখনো কিছু copy করা হয়নি";
-    private const string NothingFound = "কিছু পাওয়া যায়নি";
+    private const string NothingCopied = "Nothing copied yet";
+    private const string NothingFound = "No results";
 
     public ClipboardViewModel(ClipboardManager manager, AppState state, Dispatcher dispatcher)
     {
@@ -85,7 +85,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         _state.ClipboardPanelVisibilityChanged += OnVisibilityChanged;
     }
 
-    /// <summary>Popup বা panel, কোনো একটা খোলা।</summary>
+    /// <summary>Either the popup or the panel is open.</summary>
     private bool IsShown => _state.IsPopupVisible || _state.IsClipboardPanelVisible;
 
     public void Dispose()
@@ -97,10 +97,10 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         _state.ClipboardPanelVisibilityChanged -= OnVisibilityChanged;
     }
 
-    /// <summary>Item টা clipboard এ দেয়, সবার উপরে তোলে আর ১ সেকেন্ড "Copied" দেখায়।</summary>
+    /// <summary>Puts the item on the clipboard, moves it to the top and shows "Copied" for 1 second.</summary>
     public void Copy(ClipboardItemViewModel? item) => _ = CopyAsync(item);
 
-    /// <summary><see cref="Copy"/> এর মতোই; clipboard এ লেখা হয়ে গেলে ফল দেয় (সফল হলে true)।</summary>
+    /// <summary>Like <see cref="Copy"/>; completes once the clipboard is written (true on success).</summary>
     public async Task<bool> CopyAsync(ClipboardItemViewModel? item)
     {
         if (item is null)
@@ -112,7 +112,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         item.IsCopied = false;
         item.IsCopyFailed = false;
 
-        // সফল হলে manager item টা উপরে তোলে; fail হলে কারণ log এ লেখা হয়
+        // On success the manager moves the item to the top; on failure the reason is logged
         string? error = await _manager.CopyToClipboardAsync(item.Id);
         bool ok = error is null;
         item.IsCopied = ok;
@@ -129,8 +129,8 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Search box এ Enter চাপলে কোনটা: বাছাই করা item, না থাকলে প্রথম result। Debounce শেষ
-    /// হওয়ার আগে Enter চাপলেও সর্বশেষ লেখা অনুযায়ী।
+    /// Which item Enter in the search box takes: the selected item, or the first result if none. Even if
+    /// Enter is pressed before the debounce ends, it uses the latest text.
     /// </summary>
     public ClipboardItemViewModel? CurrentOrFirst()
     {
@@ -145,7 +145,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// Hotkey panel খোলার সময়: search আর filter মুছে প্রথম item বাছাই করে রাখে।
+    /// When the hotkey panel opens: clears search and filter and selects the first item.
     /// </summary>
     public void ResetForQuickPick()
     {
@@ -155,7 +155,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         ApplyFilter(selectFirst: true);
     }
 
-    /// <summary>Item মুছে পরের item টা বাছাই করে রাখে (keyboard দিয়ে পরপর মোছার জন্য)।</summary>
+    /// <summary>Deletes the item and selects the next one (for deleting several in a row with the keyboard).</summary>
     public void Delete(ClipboardItemViewModel? item)
     {
         if (item is null)
@@ -200,7 +200,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
 
     private void OnHistoryChanged(object? sender, EventArgs e)
     {
-        // যেকোনো thread থেকে আসতে পারে; একবারই UI thread এ পাঠানো হয়
+        // May arrive from any thread; posted to the UI thread only once
         if (Interlocked.Exchange(ref _dirty, 1) == 0 && IsShown)
         {
             _dispatcher.BeginInvoke(DispatcherPriority.Background, RefreshIfDirty);
@@ -224,7 +224,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
             return;
         }
 
-        // লুকানো অবস্থায় কোনো timer চলবে না; বাকি থাকা search এখনই বসানো হয়
+        // No timers while hidden; any pending search is applied now
         _clockTimer.Stop();
         FlushSearch();
     }
@@ -237,7 +237,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         }
     }
 
-    /// <summary>Manager এর history থেকে item ViewModel গুলো মেলায় (পুরনো ViewModel আবার ব্যবহার হয়)।</summary>
+    /// <summary>Reconciles the item ViewModels with the manager's history (reusing old ViewModels).</summary>
     private void Refresh()
     {
         Interlocked.Exchange(ref _dirty, 0);
@@ -276,7 +276,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     }
 
     /// <param name="selectFirst">
-    /// Search/filter বদলালে true: প্রথম result বাছাই হয়, যাতে Enter যেটা নেবে সেটাই চিহ্নিত থাকে।
+    /// True when search/filter changed: the first result is selected so the item Enter will take is highlighted.
     /// </param>
     private void ApplyFilter(bool selectFirst = false)
     {
@@ -313,8 +313,8 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// পুরো collection বদলে না দিয়ে শুধু Move/Insert/Remove করে, যাতে scroll আর selection
-    /// না হারায় আর virtualized container গুলো আবার বানাতে না হয়।
+    /// Uses only Move/Insert/Remove instead of replacing the whole collection, so scroll and selection
+    /// aren't lost and virtualized containers don't have to be rebuilt.
     /// </summary>
     private void Sync(List<ClipboardItemViewModel> target)
     {

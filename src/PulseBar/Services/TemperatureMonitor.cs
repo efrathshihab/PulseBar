@@ -5,9 +5,9 @@ using PulseBar.Models;
 namespace PulseBar.Services;
 
 /// <summary>
-/// LibreHardwareMonitor দিয়ে CPU আর GPU temperature পড়ে, প্রতি ২ সেকেন্ডে।
-/// CPU এর জন্য admin আর PawnIO driver লাগে; না থাকলে শুরুতে একবার চেষ্টা করে থেমে যায়
-/// আর <see cref="Status"/> এ কারণ রাখে। GPU temp (যেমন NVIDIA) অনেক সময় admin ছাড়াও পাওয়া যায়।
+/// Reads CPU and GPU temperature through LibreHardwareMonitor, every 2 seconds.
+/// The CPU needs admin and the PawnIO driver; without them it tries once at startup, stops,
+/// and keeps the reason in <see cref="Status"/>. GPU temp (e.g. NVIDIA) is often available without admin.
 /// </summary>
 public sealed class TemperatureMonitor : IDisposable
 {
@@ -17,7 +17,7 @@ public sealed class TemperatureMonitor : IDisposable
     private CancellationTokenSource? _cts;
     private Task? _loop;
 
-    // double? atomic না, তাই bits হিসেবে রাখা; NaN মানে null
+    // double? isn't atomic, so it's stored as bits; NaN means null
     private long _celsiusBits = BitConverter.DoubleToInt64Bits(double.NaN);
     private long _gpuCelsiusBits = BitConverter.DoubleToInt64Bits(double.NaN);
     private volatile TemperatureStatus _status = TemperatureStatus.Starting;
@@ -28,7 +28,7 @@ public sealed class TemperatureMonitor : IDisposable
 
     public TemperatureStatus Status => _status;
 
-    /// <summary>Main GPU এর নাম (GpuMonitor থেকে); একাধিক GPU থাকলে এটার সাথে মিলিয়ে বাছাই হয়।</summary>
+    /// <summary>Name of the main GPU (from GpuMonitor); with several GPUs, the matching one is picked.</summary>
     public string? PreferredGpuName { get; set; }
 
     public void Start()
@@ -42,7 +42,7 @@ public sealed class TemperatureMonitor : IDisposable
 
             _cts = new CancellationTokenSource();
             var token = _cts.Token;
-            // Computer.Open() ধীর, তাই পুরোটা background এ
+            // Computer.Open() is slow, so all of it runs in the background
             _loop = Task.Run(() => RunAsync(token), token);
         }
     }
@@ -68,7 +68,7 @@ public sealed class TemperatureMonitor : IDisposable
         }
         catch (AggregateException)
         {
-            // Cancel, উপেক্ষা
+            // Cancelled, ignore
         }
 
         _cts?.Dispose();
@@ -117,11 +117,11 @@ public sealed class TemperatureMonitor : IDisposable
                         : !hasDriver ? TemperatureStatus.NoDriver
                         : TemperatureStatus.NoSensor;
 
-                // Admin বা driver না থাকলে বারবার চেষ্টা করে লাভ নেই
+                // Without admin or the driver, retrying is pointless
                 cpuActive = isAdmin && hasDriver && cpu is not null;
             }
 
-            // GPU: শুরুতে মান না পেলে আর চেষ্টা নয়
+            // GPU: if there's no value at startup, don't try again
             bool gpuActive = ValidValue(gpuSensor) is not null;
             SetBits(ref _gpuCelsiusBits, ValidValue(gpuSensor));
 
@@ -161,7 +161,7 @@ public sealed class TemperatureMonitor : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // স্বাভাবিক থামা
+            // Normal stop
         }
         catch
         {
@@ -179,7 +179,7 @@ public sealed class TemperatureMonitor : IDisposable
             }
             catch
             {
-                // বন্ধ করার সময়ের ভুল উপেক্ষা
+                // Ignore errors while closing
             }
         }
     }
@@ -202,7 +202,7 @@ public sealed class TemperatureMonitor : IDisposable
     }
 
     /// <summary>
-    /// Main GPU এর নামের সাথে মেলে এমন GPU; না পেলে আলাদা (NVIDIA/AMD) GPU, তারপর Intel।
+    /// The GPU matching the main GPU's name; otherwise a discrete (NVIDIA/AMD) GPU, then Intel.
     /// </summary>
     private static IHardware? PickGpu(IList<IHardware> hardware, string? preferredName)
     {
@@ -233,7 +233,7 @@ public sealed class TemperatureMonitor : IDisposable
         return discrete ?? any;
     }
 
-    /// <summary>GPU এর "GPU Core" temperature sensor।</summary>
+    /// <summary>The GPU's "GPU Core" temperature sensor.</summary>
     private static ISensor? PickGpuSensor(IHardware gpu)
     {
         foreach (var sensor in AllSensors(gpu))
@@ -259,7 +259,7 @@ public sealed class TemperatureMonitor : IDisposable
     }
 
     /// <summary>
-    /// আগে "CPU Package" (Intel) বা "Tctl/Tdie" (AMD); না পেলে Core sensor গুলোর মধ্যে যেটার মান সবচেয়ে বেশি।
+    /// "CPU Package" (Intel) or "Tctl/Tdie" (AMD) first; otherwise the Core sensor with the highest value.
     /// </summary>
     private static ISensor? PickSensor(IHardware cpu)
     {
@@ -293,7 +293,7 @@ public sealed class TemperatureMonitor : IDisposable
     }
 
     /// <summary>
-    /// Driver ছাড়া কিছু CPU (যেমন AMD Tctl/Tdie) null না দিয়ে 0 দেয়, তাই অবাস্তব মান বাদ।
+    /// Without the driver some CPUs (e.g. AMD Tctl/Tdie) report 0 instead of null, so unrealistic values are dropped.
     /// </summary>
     private static float? ValidValue(ISensor? sensor)
     {

@@ -4,8 +4,8 @@ using System.Windows.Data;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Enum মান আর ConverterParameter মিললে true। Filter chip (RadioButton) এর IsChecked এর জন্য;
-/// check হলে উল্টো দিকে সেই মান বসায়।
+/// True when the enum value matches the ConverterParameter. For filter chips' (RadioButton) IsChecked;
+/// when checked, sets that value back the other way.
 /// </summary>
 public sealed class EnumMatchConverter : IValueConverter
 {

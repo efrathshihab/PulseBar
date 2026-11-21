@@ -10,16 +10,16 @@ using DrawingIcon = System.Drawing.Icon;
 namespace PulseBar.Views;
 
 /// <summary>
-/// Tray icon এ CPU % এর সংখ্যা আর level অনুযায়ী রং দেখায়; tooltip এ CPU, GPU, RAM আর master volume।
-/// প্রতি ২ সেকেন্ডে একবার দেখে, আর শুধু সংখ্যা বা রং বদলালে icon নতুন করে বানায়।
+/// Shows the CPU % number on the tray icon, colored by level; the tooltip shows CPU, GPU, RAM and master volume.
+/// Checks once every 2 seconds and rebuilds the icon only when the number or color changes.
 /// </summary>
 /// <remarks>
-/// GeneratedIconSource এর property বদলালে H.NotifyIcon প্রতিবার নতুন icon বানায় কিন্তু পুরনো
-/// handle ছাড়ে না (এক মিনিটে ~১৭০০ GDI handle জমেছিল)। তাই icon নিজে আঁকা হয় আর পুরনোটা destroy হয়।
+/// When GeneratedIconSource's properties change, H.NotifyIcon builds a new icon every time but never releases
+/// the old handle (~1700 GDI handles piled up in a minute). So the icon is drawn here and the old one destroyed.
 /// </remarks>
 public sealed class TrayIconUpdater : IDisposable
 {
-    // Snapshot আসে প্রতি ১ সেকেন্ডে; ১.৫ সেকেন্ডের নিয়মে কার্যত প্রতি ২টা snapshot এ একবার
+    // Snapshots arrive every second; with a 1.5 second rule this is effectively once every 2 snapshots
     private static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(1.5);
 
     private static readonly DrawingColor Purple = DrawingColor.FromArgb(0x7C, 0x5C, 0xFF);
@@ -34,13 +34,13 @@ public sealed class TrayIconUpdater : IDisposable
     private DateTime _lastCheck = DateTime.MinValue;
     private string _lastText = "P";
     private UsageLevel _lastLevel = UsageLevel.Unknown;
-    /// <summary>Debug build এ যেমন "PulseBar (dev 21:05)", যাতে বোঝা যায় কোন build চলছে।</summary>
+    /// <summary>In Debug builds e.g. "PulseBar (dev 21:05)", to show which build is running.</summary>
     public static readonly string ToolTipTitle =
         BuildInfo.DevLabel is { } dev ? $"PulseBar ({dev})" : "PulseBar";
 
     private string _lastToolTip = ToolTipTitle;
 
-    // এখন tray তে যে icon বসানো আছে; পরেরটা বসলে এটা destroy হয়
+    // The icon currently set in the tray; destroyed once the next one is set
     private DrawingIcon? _currentIcon;
 
     public TrayIconUpdater(AppState state, TaskbarIcon trayIcon, AudioController audio, Dispatcher dispatcher)
@@ -112,7 +112,7 @@ public sealed class TrayIconUpdater : IDisposable
                 _ => Purple,
             };
 
-            // Amber এর উপর সাদা লেখা পড়া কঠিন, তাই কালো
+            // White text on amber is hard to read, so black
             var foreground = level == UsageLevel.Warning ? DrawingColor.Black : DrawingColor.White;
 
             try
@@ -120,13 +120,13 @@ public sealed class TrayIconUpdater : IDisposable
                 var icon = TrayIconRenderer.Create(text, background, foreground);
                 _trayIcon.UpdateIcon(icon);
 
-                // Shell নিজের কপি রাখে, তাই আগের icon এখন ছেড়ে দেওয়া যায়
+                // The shell keeps its own copy, so the previous icon can be released now
                 TrayIconRenderer.Destroy(_currentIcon);
                 _currentIcon = icon;
             }
             catch
             {
-                // Icon আঁকা না গেলে আগেরটাই থাকবে
+                // If the icon can't be drawn, the previous one stays
             }
         }
 
@@ -139,7 +139,7 @@ public sealed class TrayIconUpdater : IDisposable
     private static string Percent(double? value) =>
         value is { } v ? Math.Round(v).ToString("0", CultureInfo.InvariantCulture) + "%" : "N/A";
 
-    // Volume এর snapshot audio thread রাখে; এখানে শুধু পড়া, তাই কোনো COM call নেই
+    // The audio thread keeps the volume snapshot; this only reads it, so no COM calls
     private static string VolumeText(MasterVolumeState? master) => master switch
     {
         null => "N/A",

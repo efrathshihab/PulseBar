@@ -7,8 +7,8 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// RegisterHotKey দিয়ে global hotkey। নিজস্ব message-only window এ WM_HOTKEY ধরে, তাই কোনো
-/// keyboard hook বা polling নেই। UI thread থেকে বানাতে আর ডাকতে হবে; callback ও UI thread এ আসে।
+/// Global hotkeys through RegisterHotKey. Catches WM_HOTKEY on its own message-only window, so there's no
+/// keyboard hook or polling. Create and call it from the UI thread; callbacks also arrive on the UI thread.
 /// </summary>
 public sealed class HotKeyManager : IDisposable
 {
@@ -35,15 +35,15 @@ public sealed class HotKeyManager : IDisposable
         }
         catch (Exception ex)
         {
-            // Window না পেলে hotkey কাজ করবে না, তবে app চলবে
+            // Without the window hotkeys won't work, but the app keeps running
             Log.Error("Hotkey window", ex);
             _window = null;
         }
     }
 
     /// <summary>
-    /// Hotkey register করে। অন্য app আগে থেকে নিয়ে রাখলে (বা অন্য কোনো কারণে) false; তখন
-    /// কোনো exception না। সফল হলে <paramref name="id"/> দিয়ে পরে <see cref="Unregister"/> করা যায়।
+    /// Registers a hotkey. False if another app already holds it (or for any other reason); no
+    /// exception then. On success it can later be removed with <see cref="Unregister"/> using <paramref name="id"/>.
     /// </summary>
     public bool TryRegister(HotKey hotKey, Action callback, out int id)
     {

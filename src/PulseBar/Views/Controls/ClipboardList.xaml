@@ -1,6 +1,6 @@
 <!--
-    Clipboard history এর list, search আর filter। Popup এর Clipboard tab আর hotkey এর
-    ClipboardPanel দুটোই এটা ব্যবহার করে, একই ClipboardViewModel দিয়ে।
+    The clipboard history list, search and filter. Used by both the popup's Clipboard tab and the hotkey
+    ClipboardPanel, with the same ClipboardViewModel.
 -->
 <UserControl x:Class="PulseBar.Views.Controls.ClipboardList"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -17,7 +17,7 @@
         <util:EnumMatchConverter x:Key="EnumMatchConverter" />
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-        <!-- All / Text / Images / Screenshots chip; সব রং theme থেকে -->
+        <!-- All / Text / Images / Screenshots chips; all colors come from the theme -->
         <Style x:Key="ChipStyle" TargetType="RadioButton">
             <Setter Property="GroupName" Value="ClipboardFilter" />
             <Setter Property="Margin" Value="0,0,6,0" />
@@ -54,7 +54,7 @@
             </Setter>
         </Style>
 
-        <!-- প্রতিটা item এর card -->
+        <!-- The card for each item -->
         <Style x:Key="CardStyle" TargetType="ListBoxItem">
             <Setter Property="HorizontalContentAlignment" Value="Stretch" />
             <Setter Property="FocusVisualStyle" Value="{x:Null}" />
@@ -91,7 +91,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <!-- Text: সর্বোচ্চ ৩ লাইন, বেশি হলে "…" -->
+                <!-- Text: up to 3 lines, "…" if longer -->
                 <TextBlock Grid.Row="0"
                            Margin="0,0,26,0"
                            Text="{Binding DisplayText}"
@@ -104,7 +104,7 @@
                            LineStackingStrategy="BlockLineHeight"
                            MaxHeight="54" />
 
-                <!-- Image: thumbnail আর পাশে মাপ -->
+                <!-- Image: thumbnail with its size beside it -->
                 <StackPanel Grid.Row="0"
                             Orientation="Horizontal"
                             Margin="0,0,26,0"
@@ -120,7 +120,7 @@
                                    RenderOptions.BitmapScalingMode="HighQuality" />
                         </Border>
 
-                        <!-- Screenshot হলে thumbnail এর কোণায় ছোট camera badge -->
+                        <!-- For screenshots, a small camera badge in the thumbnail corner -->
                         <Border HorizontalAlignment="Right"
                                 VerticalAlignment="Bottom"
                                 Margin="0,0,3,3"
@@ -170,7 +170,7 @@
                     </Border>
                 </Grid>
 
-                <!-- Mouse রাখলে ডান কোণে delete -->
+                <!-- Delete in the right corner on hover -->
                 <ui:Button x:Name="DeleteButton"
                            Grid.RowSpan="2"
                            HorizontalAlignment="Right"
@@ -264,7 +264,7 @@
             </ListBox.ItemsPanel>
         </ListBox>
 
-        <!-- খালি অবস্থা -->
+        <!-- Empty state -->
         <StackPanel Grid.Row="2"
                     HorizontalAlignment="Center"
                     VerticalAlignment="Center"

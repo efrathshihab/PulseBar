@@ -2,25 +2,25 @@ using System.Windows.Input;
 
 namespace PulseBar.Models;
 
-/// <summary>একটা global hotkey: modifier গুলো আর একটা key, যেমন Ctrl+Alt+V।</summary>
+/// <summary>A global hotkey: modifiers and one key, such as Ctrl+Alt+V.</summary>
 public readonly record struct HotKey(ModifierKeys Modifiers, Key Key)
 {
     private const ModifierKeys AllModifiers =
         ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Shift | ModifierKeys.Windows;
 
-    /// <summary>অন্তত একটা modifier আছে আর মূল key টা নিজে modifier না।</summary>
+    /// <summary>Has at least one modifier and the main key isn't a modifier itself.</summary>
     public bool IsValid =>
         (Modifiers & AllModifiers) != ModifierKeys.None &&
         (Modifiers & ~AllModifiers) == ModifierKeys.None &&
         IsUsableKey(Key);
 
-    /// <summary>যেমন "Ctrl+Alt+V"। Settings file এ এই রূপেই থাকে, <see cref="TryParse"/> আবার পড়তে পারে।</summary>
+    /// <summary>e.g. "Ctrl+Alt+V". Stored like this in the settings file, and <see cref="TryParse"/> can read it back.</summary>
     public override string ToString() => Format(Key.ToString());
 
-    /// <summary>UI এর জন্য: D1 এর বদলে "1"।</summary>
+    /// <summary>For the UI: "1" instead of D1.</summary>
     public string DisplayText => Format(KeyDisplayName(Key));
 
-    /// <summary>"Ctrl+Alt+V" ধরনের লেখা পড়ে। ভুল লেখা বা modifier ছাড়া হলে false।</summary>
+    /// <summary>Reads text like "Ctrl+Alt+V". False for bad text or no modifier.</summary>
     public static bool TryParse(string? text, out HotKey hotKey)
     {
         hotKey = default;
@@ -55,7 +55,7 @@ public readonly record struct HotKey(ModifierKeys Modifiers, Key Key)
             modifiers |= modifier;
         }
 
-        // সংখ্যা দিয়ে enum পড়া হবে না ("Ctrl+65" এর মতো)
+        // Enums aren't parsed from numbers (like "Ctrl+65")
         string keyName = parts[^1];
         if (keyName.Length == 0 || char.IsDigit(keyName[0]) && keyName.Length > 1 ||
             !Enum.TryParse(keyName.Length == 1 && char.IsDigit(keyName[0]) ? "D" + keyName : keyName, ignoreCase: true, out Key key) ||
@@ -74,7 +74,7 @@ public readonly record struct HotKey(ModifierKeys Modifiers, Key Key)
         return true;
     }
 
-    /// <summary>Hotkey এর মূল key হতে পারে কিনা: modifier, IME বা অদ্ভুত key না।</summary>
+    /// <summary>Whether it can be a hotkey's main key: not a modifier, IME or odd key.</summary>
     public static bool IsUsableKey(Key key) => key switch
     {
         Key.None or Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or

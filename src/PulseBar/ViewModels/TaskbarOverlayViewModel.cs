@@ -6,8 +6,8 @@ using PulseBar.Utilities;
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// Taskbar overlay এর চারটা মান। ObservableProperty শুধু মান বদলালেই notify করে,
-/// তাই একই সংখ্যা থাকলে overlay আবার আঁকা হয় না।
+/// The four values of the taskbar overlay. ObservableProperty notifies only when a value changes,
+/// so the overlay isn't redrawn while the numbers stay the same.
 /// </summary>
 public sealed partial class TaskbarOverlayViewModel : ObservableObject
 {
@@ -37,7 +37,7 @@ public sealed partial class TaskbarOverlayViewModel : ObservableObject
     [ObservableProperty]
     public partial UsageLevel GpuTempLevel { get; set; }
 
-    /// <summary>UI thread থেকে ডাকতে হবে।</summary>
+    /// <summary>Must be called from the UI thread.</summary>
     public void Update(SystemSnapshot s)
     {
         CpuText = Format(s.CpuPercent, "%");
@@ -60,7 +60,7 @@ public sealed partial class TaskbarOverlayViewModel : ObservableObject
             return NotAvailable;
         }
 
-        // ৩ অঙ্কের বেশি হলে নির্দিষ্ট চওড়ায় ধরবে না
+        // More than 3 digits wouldn't fit the fixed width
         return Math.Clamp(Math.Round(v), 0, 999).ToString("0", CultureInfo.InvariantCulture) + unit;
     }
 }

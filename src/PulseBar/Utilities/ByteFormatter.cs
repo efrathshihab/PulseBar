@@ -3,23 +3,23 @@ using System.Globalization;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Bytes কে File Explorer এর মতো 1024 ভিত্তিক লেখায় বদলায়: "7.2 GB", "476 GB"।
+/// Formats bytes in base 1024 like File Explorer: "7.2 GB", "476 GB".
 /// </summary>
 public static class ByteFormatter
 {
     private static readonly string[] Units = ["B", "KB", "MB", "GB", "TB", "PB"];
 
-    /// <summary>যেমন "7.2 GB"।</summary>
+    /// <summary>e.g. "7.2 GB".</summary>
     public static string Format(ulong bytes)
     {
         int unit = PickUnit(bytes);
         return $"{FormatNumber(bytes, unit)} {Units[unit]}";
     }
 
-    /// <summary>Speed, যেমন "850 KB/s", "12.4 MB/s"।</summary>
+    /// <summary>Speed, e.g. "850 KB/s", "12.4 MB/s".</summary>
     public static string FormatSpeed(ulong bytesPerSec) => $"{Format(bytesPerSec)}/s";
 
-    /// <summary>দুটো মান total এর একক দিয়ে: যেমন "7.2 / 15.8 GB"।</summary>
+    /// <summary>Two values in the total's unit: e.g. "7.2 / 15.8 GB".</summary>
     public static string FormatPair(ulong used, ulong total)
     {
         int unit = PickUnit(total);
@@ -47,7 +47,7 @@ public static class ByteFormatter
             return bytes.ToString(CultureInfo.CurrentCulture);
         }
 
-        // ১০০ এর কম হলে এক দশমিক ("7.2", "15.8"), বড় হলে পূর্ণ সংখ্যা ("476")
+        // Below 100, one decimal ("7.2", "15.8"); larger, a whole number ("476")
         return value < 100
             ? value.ToString("0.#", CultureInfo.CurrentCulture)
             : value.ToString("0", CultureInfo.CurrentCulture);

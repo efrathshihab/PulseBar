@@ -43,7 +43,7 @@
                 <ui:TextBlock Text="PulseBar"
                               FontTypography="Subtitle"
                               VerticalAlignment="Center" />
-                <!-- শুধু Debug build এ: কখনকার build চলছে -->
+                <!-- Debug builds only: when this build was made -->
                 <ui:TextBlock x:Name="DevLabel"
                               Visibility="Collapsed"
                               Margin="8,3,0,0"
@@ -92,7 +92,7 @@
             </TabControl>
         </Grid>
 
-        <!-- Clear all এর মতো confirm dialog popup এর ভেতরেই খোলে, তাই popup লুকায় না -->
+        <!-- Confirm dialogs like Clear all open inside the popup, so the popup doesn't hide -->
         <ui:ContentDialogHost x:Name="DialogHost" />
     </Grid>
 </ui:FluentWindow>

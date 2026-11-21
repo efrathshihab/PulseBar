@@ -8,13 +8,13 @@
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:HotKeySettingViewModel}">
     <StackPanel>
-        <!-- Click করলে key চাপার অপেক্ষা; Esc বা বাইরে click এ বাতিল -->
+        <!-- Click to wait for keys; Esc or clicking elsewhere cancels -->
         <ui:Button x:Name="Box"
                    HorizontalAlignment="Stretch"
                    HorizontalContentAlignment="Center"
                    MinWidth="120"
                    Padding="10,5"
-                   ToolTip="Click করে নতুন shortcut চাপুন"
+                   ToolTip="Click, then press a new shortcut"
                    AutomationProperties.Name="Shortcut"
                    Click="Box_Click"
                    PreviewKeyDown="Box_PreviewKeyDown"

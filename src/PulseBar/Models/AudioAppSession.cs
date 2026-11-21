@@ -1,29 +1,29 @@
 namespace PulseBar.Models;
 
 /// <summary>
-/// Sound tab এর একটা row: একই exe এর সব audio session একসাথে (যেমন Chrome এর কয়েকটা)।
-/// Immutable; কিছু বদলালে <see cref="Services.AudioController"/> নতুন snapshot বানায়।
+/// One row of the Sound tab: all audio sessions of the same exe together (e.g. several from Chrome).
+/// Immutable; when anything changes <see cref="Services.AudioController"/> builds a new snapshot.
 /// </summary>
 public sealed record AudioAppSession
 {
-    /// <summary>Row চেনার জন্য: exe এর পুরো path (ছোট হাতে), System sounds এর জন্য <see cref="SystemSoundsKey"/>।</summary>
+    /// <summary>Identifies the row: the exe's full path (lowercase), or <see cref="SystemSoundsKey"/> for System sounds.</summary>
     public required string Key { get; init; }
 
-    /// <summary>Exe এর FileDescription, না পেলে exe এর নাম; অথবা "System sounds"।</summary>
+    /// <summary>The exe's FileDescription, or the exe name if missing; or "System sounds".</summary>
     public required string Name { get; init; }
 
-    /// <summary>Icon কোন file থেকে (exe বা dll)। না থাকলে null।</summary>
+    /// <summary>File the icon comes from (exe or dll). null if none.</summary>
     public string? IconPath { get; init; }
 
-    /// <summary>File এর ভেতরে icon এর index; ঋণাত্মক হলে resource ID।</summary>
+    /// <summary>Index of the icon inside the file; negative means a resource ID.</summary>
     public int IconIndex { get; init; }
 
     public bool IsSystemSounds { get; init; }
 
-    /// <summary>0.0 থেকে 1.0; কয়েকটা session থাকলে সবচেয়ে বেশিটা।</summary>
+    /// <summary>0.0 to 1.0; the highest one when there are several sessions.</summary>
     public float Volume { get; init; }
 
-    /// <summary>সব session mute থাকলে true।</summary>
+    /// <summary>True when all sessions are muted.</summary>
     public bool IsMuted { get; init; }
 
     public const string SystemSoundsKey = "#system-sounds";

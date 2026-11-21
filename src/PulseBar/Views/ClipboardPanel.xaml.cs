@@ -14,9 +14,9 @@ using Wpf.Ui.Controls;
 namespace PulseBar.Views;
 
 /// <summary>
-/// Hotkey এর clipboard panel। একবারই বানানো হয়, এরপর শুধু Hide/Show।
-/// Enter/click: copy, বন্ধ, আগের window এ focus ফিরিয়ে Ctrl+V (Windows এর Win+V এর মতো)।
-/// Shift+Enter: শুধু copy। Esc, আবার hotkey বা বাইরে click: বন্ধ।
+/// The hotkey clipboard panel. Created once, then only Hide/Show.
+/// Enter/click: copy, close, return focus to the previous window and send Ctrl+V (like Windows' Win+V).
+/// Shift+Enter: copy only. Esc, the hotkey again or a click outside: close.
 /// </summary>
 public partial class ClipboardPanel : FluentWindow
 {
@@ -42,8 +42,8 @@ public partial class ClipboardPanel : FluentWindow
     }
 
     /// <summary>
-    /// Startup এ পর্দার বাইরে, focus না নিয়ে একবার দেখিয়ে লুকায়, যাতে window, template আর
-    /// Mica আগেই তৈরি থাকে আর প্রথম hotkey তেও panel দ্রুত খোলে।
+    /// At startup, shows once off-screen without taking focus and hides again, so the window, template and
+    /// Mica are ready and the panel opens quickly even on the first hotkey.
     /// </summary>
     public void Prewarm()
     {
@@ -77,21 +77,21 @@ public partial class ClipboardPanel : FluentWindow
         var stopwatch = Stopwatch.StartNew();
         _showCount++;
 
-        // Panel সামনে আসার আগেই, যাতে PulseBar এর নিজের window না ধরে
+        // Before the panel comes to the front, so PulseBar's own window isn't remembered
         _paste.RememberTarget();
 
         StatusBadge.Visibility = Visibility.Collapsed;
         HintText.Visibility = Visibility.Visible;
         HintText.Text = _settings.AutoPaste
-            ? "Enter: paste   Shift+Enter: copy   Esc: বন্ধ"
-            : "Enter: copy   Esc: বন্ধ";
+            ? "Enter: paste   Shift+Enter: copy   Esc: close"
+            : "Enter: copy   Esc: close";
 
-        // এতে popup বন্ধ হয় আর ViewModel সর্বশেষ history মেলায়
+        // This closes the popup and lets the ViewModel reconcile the latest history
         AppState.Current.IsClipboardPanelVisible = true;
         _viewModel.ResetForQuickPick();
 
-        // দেখানোর আগেই জায়গামতো, যাতে পুরনো জায়গায় এক ঝলক না দেখা যায়; অন্য DPI এর monitor এ
-        // WPF দেখানোর সময় মাপ বদলাতে পারে, তাই পরে আরেকবার
+        // Positioned before showing so it doesn't flash at the old spot; on a monitor with another DPI
+        // WPF may change the size while showing, so once more afterwards
         var hwnd = new WindowInteropHelper(this).EnsureHandle();
         PopupPlacement.PlaceNearCursor(hwnd, Width, Height);
         Show();
@@ -102,14 +102,14 @@ public partial class ClipboardPanel : FluentWindow
         List.FocusSearch();
         List.ScrollToSelected();
 
-        // Layout আর render শেষ হলে
+        // Once layout and render are done
         Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () =>
             Log.Info($"Clipboard panel shown in {stopwatch.ElapsedMilliseconds} ms"));
     }
 
     /// <param name="restoreFocus">
-    /// Esc বা hotkey এ true: আগের window এ focus ফেরে। বাইরে click এ false, তখন focus যেখানে
-    /// click হয়েছে সেখানেই থাকে।
+    /// True for Esc or the hotkey: focus returns to the previous window. False for a click outside; focus then
+    /// stays where the click happened.
     /// </param>
     public void HidePanel(bool restoreFocus)
     {
@@ -118,8 +118,8 @@ public partial class ClipboardPanel : FluentWindow
             return;
         }
 
-        // আগে focus ফেরানো, তারপর লুকানো, যাতে মাঝে Windows অন্য কোনো window সামনে না আনে।
-        // এতে Deactivated হয়ে panel নিজেই লুকিয়ে যেতে পারে।
+        // Return focus first, then hide, so Windows doesn't bring some other window forward in between.
+        // This may deactivate the panel and hide it by itself.
         if (restoreFocus)
         {
             _paste.RestoreFocus();
@@ -146,7 +146,7 @@ public partial class ClipboardPanel : FluentWindow
             int showCount = _showCount;
             bool copied = await _viewModel.CopyAsync(e.Item);
 
-            // Copy না হলে card এ "Copy failed" দেখা যায়, panel খোলা থাকে
+            // If the copy fails the card shows "Copy failed" and the panel stays open
             if (!copied || !IsVisible || showCount != _showCount)
             {
                 return;
@@ -185,7 +185,7 @@ public partial class ClipboardPanel : FluentWindow
         }
     }
 
-    /// <summary>App বন্ধ হওয়ার সময় সত্যিই window close করতে দেয়।</summary>
+    /// <summary>Lets the window really close when the app shuts down.</summary>
     public void CloseForShutdown()
     {
         _allowClose = true;
@@ -194,7 +194,7 @@ public partial class ClipboardPanel : FluentWindow
 
     protected override void OnPreviewKeyDown(KeyEventArgs e)
     {
-        // Search box এর আগেই, যাতে লেখা থাকলেও Esc panel বন্ধ করে
+        // Before the search box, so Esc closes the panel even when there's text
         if (e.Key == Key.Escape)
         {
             HidePanel(restoreFocus: true);
@@ -207,7 +207,7 @@ public partial class ClipboardPanel : FluentWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Alt+F4 ইত্যাদিতে window নষ্ট না করে শুধু লুকানো হবে।
+        // Alt+F4 and the like only hide the window instead of destroying it.
         if (!_allowClose)
         {
             e.Cancel = true;

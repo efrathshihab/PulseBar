@@ -1,14 +1,14 @@
 # PulseBar
 
-Windows 10/11 এর জন্য একটা system tray utility: live system stats, per-app volume, clipboard history আর screenshot, সব tray থেকে।
+A system tray utility for Windows 10/11: live system stats, per-app volume, clipboard history and screenshots, all from the tray.
 
-> এখন দিন ১: tray এ icon দেখায়, right-click করে Quit করা যায়।
+> Currently at day 1: shows an icon in the tray, and right-click lets you Quit.
 
-## দরকার
+## Requirements
 - Windows 10/11
 - [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 
-## চালানো
+## Run
 ```powershell
 dotnet run --project src/PulseBar
 ```

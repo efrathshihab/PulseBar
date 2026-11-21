@@ -5,10 +5,10 @@ using PulseBar.Services;
 
 namespace PulseBar.ViewModels;
 
-/// <summary>Settings এর একটা hotkey (HotKeyBox এর DataContext)।</summary>
+/// <summary>One hotkey in Settings (the HotKeyBox's DataContext).</summary>
 public sealed partial class HotKeySettingViewModel : ObservableObject, IDisposable
 {
-    public const string InUseMessage = "এই shortcut অন্য app ব্যবহার করছে";
+    public const string InUseMessage = "This shortcut is used by another app";
 
     private readonly HotKeyBindings _bindings;
     private readonly HotKeyAction _action;
@@ -28,14 +28,14 @@ public sealed partial class HotKeySettingViewModel : ObservableObject, IDisposab
     [ObservableProperty]
     public partial string DisplayText { get; private set; } = "";
 
-    /// <summary>Control এর নিচে লাল লেখা; কিছু না থাকলে null।</summary>
+    /// <summary>Red text under the control; null if none.</summary>
     [ObservableProperty]
     public partial string? ErrorText { get; private set; }
 
     [ObservableProperty]
     public partial bool IsDefault { get; private set; }
 
-    /// <summary>Key চাপার অপেক্ষার সময় সব hotkey ছেড়ে দেয়, যাতে চাপলে panel না খোলে।</summary>
+    /// <summary>Releases all hotkeys while waiting for keys, so pressing one doesn't open the panel.</summary>
     public void BeginCapture()
     {
         _changeError = null;
@@ -45,17 +45,17 @@ public sealed partial class HotKeySettingViewModel : ObservableObject, IDisposab
 
     public void EndCapture() => _bindings.Resume();
 
-    /// <returns>নেওয়া হলে true; না হলে <see cref="ErrorText"/> এ কারণ।</returns>
+    /// <returns>True if accepted; otherwise the reason is in <see cref="ErrorText"/>.</returns>
     public bool TryApply(HotKey hotKey)
     {
         var result = _bindings.TryChange(_action, hotKey);
         _changeError = result switch
         {
             HotKeyChangeResult.Ok => null,
-            HotKeyChangeResult.Invalid => "Ctrl, Alt, Shift বা Win এর সাথে একটা key চাপুন",
+            HotKeyChangeResult.Invalid => "Press a key together with Ctrl, Alt, Shift or Win",
             HotKeyChangeResult.Duplicate => _action == HotKeyAction.ClipboardPanel
-                ? "Screenshot এ এই shortcut আছে"
-                : "Clipboard panel এ এই shortcut আছে",
+                ? "Screenshot already uses this shortcut"
+                : "Clipboard panel already uses this shortcut",
             _ => InUseMessage,
         };
         Refresh();
@@ -86,7 +86,7 @@ public sealed partial class HotKeySettingViewModel : ObservableObject, IDisposab
         DisplayText = current.DisplayText;
         IsDefault = current == HotKeyBindings.DefaultFor(_action);
 
-        // নতুনটা নেওয়া না গেলে সেই কারণ; না হলে এখনকারটা চলছে কিনা
+        // The reason if the new one wasn't accepted; otherwise whether the current one works
         ErrorText = _changeError ?? (_bindings.IsRegistered(_action) ? null : InUseMessage);
     }
 }

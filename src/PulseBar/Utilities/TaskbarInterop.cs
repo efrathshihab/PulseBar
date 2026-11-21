@@ -4,8 +4,8 @@ using Microsoft.Win32;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Primary taskbar (Shell_TrayWnd) খোঁজা, তার অবস্থান/DPI/theme পড়া, আর overlay এর child window
-/// সরানোর Win32 কাজগুলো। সব হিসাব physical pixel এ।
+/// Win32 work for finding the primary taskbar (Shell_TrayWnd), reading its position/DPI/theme, and moving
+/// the overlay's child window. All math is in physical pixels.
 /// </summary>
 internal static class TaskbarInterop
 {
@@ -23,10 +23,10 @@ internal static class TaskbarInterop
 
     private const string PersonalizeKey = @"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize";
 
-    /// <summary>Primary monitor এর taskbar; না পেলে IntPtr.Zero।</summary>
+    /// <summary>The primary monitor's taskbar; IntPtr.Zero if not found.</summary>
     public static IntPtr FindPrimaryTaskbar() => FindWindow("Shell_TrayWnd", null);
 
-    /// <summary>Taskbar এর ভেতরের notification area (^ arrow থেকে ঘড়ি পর্যন্ত)।</summary>
+    /// <summary>The notification area inside the taskbar (from the ^ arrow to the clock).</summary>
     public static bool TryGetTrayNotifyRect(IntPtr taskbar, out RECT rect)
     {
         rect = default;
@@ -37,7 +37,7 @@ internal static class TaskbarInterop
             && rect.Right > rect.Left;
     }
 
-    /// <summary>Taskbar নিচে আছে কিনা আর auto-hide চালু কিনা।</summary>
+    /// <summary>Whether the taskbar is at the bottom and whether auto-hide is on.</summary>
     public static bool TryGetTaskbarLayout(IntPtr taskbar, out RECT rect, out bool isBottom, out bool isAutoHide)
     {
         isBottom = false;
@@ -60,14 +60,14 @@ internal static class TaskbarInterop
         return true;
     }
 
-    /// <summary>Taskbar এর DPI scale (1.0 = 100%)।</summary>
+    /// <summary>The taskbar's DPI scale (1.0 = 100%).</summary>
     public static double GetScale(IntPtr hwnd)
     {
         uint dpi = GetDpiForWindow(hwnd);
         return dpi > 0 ? dpi / 96.0 : 1.0;
     }
 
-    /// <summary>Taskbar Light theme এ কিনা (SystemUsesLightTheme)। না পেলে Dark ধরা হয়।</summary>
+    /// <summary>Whether the taskbar uses the Light theme (SystemUsesLightTheme). Dark if unknown.</summary>
     public static bool IsTaskbarLight()
     {
         try
@@ -81,7 +81,7 @@ internal static class TaskbarInterop
         }
     }
 
-    /// <summary>Child window কে parent এর client coordinate এ বসিয়ে sibling দের উপরে আনে।</summary>
+    /// <summary>Places the child window in the parent's client coordinates and brings it above its siblings.</summary>
     public static void PlaceChild(IntPtr hwnd, IntPtr parent, int screenX, int screenY, int width, int height)
     {
         var pt = new POINT { X = screenX, Y = screenY };
@@ -89,7 +89,7 @@ internal static class TaskbarInterop
         SetWindowPos(hwnd, HWND_TOP, pt.X, pt.Y, width, height, SWP_NOACTIVATE | SWP_SHOWWINDOW);
     }
 
-    /// <summary>Taskbar এর নিজের XAML layer যেন overlay ঢেকে না ফেলে।</summary>
+    /// <summary>So the taskbar's own XAML layer doesn't cover the overlay.</summary>
     public static void EnsureOnTop(IntPtr hwnd)
     {
         if (GetWindow(hwnd, GW_HWNDPREV) != IntPtr.Zero)
@@ -104,7 +104,7 @@ internal static class TaskbarInterop
 
     public static bool IsChildOf(IntPtr hwnd, IntPtr parent) => GetParent(hwnd) == parent;
 
-    /// <summary>Admin হিসেবে চললেও Explorer এর পাঠানো message যেন আটকে না যায়।</summary>
+    /// <summary>So messages from Explorer aren't blocked even when running as admin.</summary>
     public static void AllowMessage(IntPtr hwnd, uint message) =>
         ChangeWindowMessageFilterEx(hwnd, message, MSGFLT_ALLOW, IntPtr.Zero);
 

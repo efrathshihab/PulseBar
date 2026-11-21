@@ -4,13 +4,13 @@
              Background="Transparent">
     <StackPanel HorizontalAlignment="Center">
         <Grid x:Name="RingHost" Width="104" Height="104">
-            <!-- পেছনের track -->
+            <!-- Background track -->
             <Ellipse x:Name="Track"
                      StrokeThickness="8"
                      Stroke="{DynamicResource ControlStrongFillColorDisabledBrush}"
                      Opacity="0.35" />
 
-            <!-- মান অনুযায়ী arc -->
+            <!-- Arc for the value -->
             <Path x:Name="Arc"
                   StrokeThickness="8"
                   StrokeStartLineCap="Round"

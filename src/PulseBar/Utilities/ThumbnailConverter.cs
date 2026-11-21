@@ -7,13 +7,13 @@ using System.Windows.Media.Imaging;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Thumbnail file থেকে ছোট BitmapImage বানায়: DecodePixelWidth দিয়ে, OnLoad (file lock থাকে না,
-/// তাই item মুছলে ছবিও মোছা যায়), তারপর Freeze। Stream থেকে পড়া হয়, যাতে WPF এর URI cache এ
-/// জমে না থাকে; card recycle হলে ছবিটাও memory থেকে চলে যায়।
+/// Builds a small BitmapImage from a thumbnail file: with DecodePixelWidth, OnLoad (no file lock,
+/// so the image can be deleted with the item), then Freeze. Read from a stream so it doesn't pile up
+/// in WPF's URI cache; when a card is recycled, the image leaves memory too.
 /// </summary>
 public sealed class ThumbnailConverter : IValueConverter
 {
-    /// <summary>Card এ ~120px চওড়া, ২০০% DPI পর্যন্ত ঝাপসা না হওয়ার জন্য।</summary>
+    /// <summary>~120px wide on the card, sharp up to 200% DPI.</summary>
     public const int DecodeWidth = 240;
 
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
@@ -32,7 +32,7 @@ public sealed class ThumbnailConverter : IValueConverter
             image.CacheOption = BitmapCacheOption.OnLoad;
             image.CreateOptions = BitmapCreateOptions.IgnoreColorProfile;
 
-            // ছোট ছবিকে বড় করে decode করা হবে না
+            // Small images are never decoded larger
             int width = ReadPngWidth(stream);
             if (width > DecodeWidth)
             {
@@ -46,7 +46,7 @@ public sealed class ThumbnailConverter : IValueConverter
         }
         catch
         {
-            // File মুছে গেছে বা নষ্ট: ফাঁকা থাকবে
+            // File deleted or corrupt: stays blank
             return null;
         }
     }
@@ -54,7 +54,7 @@ public sealed class ThumbnailConverter : IValueConverter
     public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture) =>
         throw new NotSupportedException();
 
-    /// <summary>PNG এর IHDR থেকে চওড়া পড়ে stream কে শুরুতে ফিরিয়ে দেয়; না পারলে 0।</summary>
+    /// <summary>Reads the width from the PNG's IHDR and rewinds the stream; 0 on failure.</summary>
     private static int ReadPngWidth(Stream stream)
     {
         Span<byte> header = stackalloc byte[24];

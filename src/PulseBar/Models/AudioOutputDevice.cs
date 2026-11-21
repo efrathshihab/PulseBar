@@ -1,6 +1,6 @@
 namespace PulseBar.Models;
 
-/// <summary>Output device এর ধরন, PKEY_AudioEndpoint_FormFactor থেকে।</summary>
+/// <summary>Kind of output device, from PKEY_AudioEndpoint_FormFactor.</summary>
 public enum AudioDeviceKind
 {
     Other,
@@ -8,24 +8,24 @@ public enum AudioDeviceKind
     Headphones,
     Headset,
 
-    /// <summary>HDMI বা DisplayPort (monitor/TV)।</summary>
+    /// <summary>HDMI or DisplayPort (monitor/TV).</summary>
     Display,
 }
 
-/// <summary>একটা Active output (render) device। Immutable।</summary>
+/// <summary>One active output (render) device. Immutable.</summary>
 public sealed record AudioOutputDevice
 {
-    /// <summary>Windows এর endpoint ID।</summary>
+    /// <summary>Windows endpoint ID.</summary>
     public required string Id { get; init; }
 
     public required string Name { get; init; }
 
     public AudioDeviceKind Kind { get; init; }
 
-    /// <summary>এখন default (Multimedia role) কিনা।</summary>
+    /// <summary>Whether it is the default now (Multimedia role).</summary>
     public bool IsDefault { get; init; }
 }
 
-/// <summary>Default device এর master volume।</summary>
-/// <param name="Volume">0.0 থেকে 1.0।</param>
+/// <summary>Master volume of the default device.</summary>
+/// <param name="Volume">0.0 to 1.0.</param>
 public sealed record MasterVolumeState(float Volume, bool IsMuted);

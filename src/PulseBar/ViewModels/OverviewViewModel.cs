@@ -9,8 +9,8 @@ using PulseBar.Utilities;
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// AppState এর snapshot থেকে Overview এর gauge আর লেখা বানায়।
-/// Popup লুকানো থাকলে কিছুই update করে না; খুললে সাথে সাথে সর্বশেষ মান বসায়।
+/// Builds the Overview gauges and text from AppState's snapshot.
+/// Updates nothing while the popup is hidden; sets the latest values as soon as it opens.
 /// </summary>
 public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 {
@@ -30,11 +30,11 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double? GpuValue { get; set; }
 
-    /// <summary>যেমন "2.1 / 6 GB"।</summary>
+    /// <summary>e.g. "2.1 / 6 GB".</summary>
     [ObservableProperty]
     public partial string GpuSubText { get; set; } = string.Empty;
 
-    /// <summary>GPU gauge এর tooltip এ GPU এর নাম।</summary>
+    /// <summary>GPU name for the GPU gauge tooltip.</summary>
     [ObservableProperty]
     public partial string? GpuName { get; set; }
 
@@ -56,7 +56,7 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial double? TempValue { get; set; }
 
-    /// <summary>Temperature কেন N/A, mouse রাখলে দেখায়। ঠিক থাকলে null।</summary>
+    /// <summary>Why the temperature is N/A, shown on hover. null when it works.</summary>
     [ObservableProperty]
     public partial string? TempToolTip { get; set; }
 
@@ -66,10 +66,10 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string UploadText { get; set; } = $"↑ {NotAvailable}";
 
-    /// <summary>System drive ছাড়া বাকি fixed drive গুলো।</summary>
+    /// <summary>Fixed drives other than the system drive.</summary>
     public ObservableCollection<DriveItem> OtherDrives { get; } = [];
 
-    /// <param name="takeScreenshot">Overview এর "Screenshot" button চাপলে।</param>
+    /// <param name="takeScreenshot">When Overview's "Screenshot" button is pressed.</param>
     public OverviewViewModel(AppState state, Dispatcher dispatcher, Action takeScreenshot)
     {
         _state = state;
@@ -90,7 +90,7 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 
     private void OnSnapshotUpdated(object? sender, SystemSnapshot snapshot)
     {
-        // Popup লুকানো থাকলে UI thread কে জাগানোরও দরকার নেই
+        // No need to even wake the UI thread while the popup is hidden
         if (!_state.IsPopupVisible)
         {
             return;
@@ -107,7 +107,7 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 
     private void OnPopupVisibilityChanged(object? sender, bool visible)
     {
-        // UI thread থেকে আসে; popup দেখানোর আগেই সর্বশেষ মান বসে যায়
+        // Comes from the UI thread; the latest values are set before the popup shows
         if (visible && _state.Snapshot is { } latest)
         {
             Apply(latest);
@@ -116,7 +116,7 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 
     private void Apply(SystemSnapshot s)
     {
-        // পূর্ণ সংখ্যায় রাখা হয়, যাতে একই মানে বারবার animation না হয়
+        // Kept as whole numbers so the same value doesn't animate again and again
         CpuValue = Round(s.CpuPercent);
 
         RamValue = Round(s.RamPercent);
@@ -134,16 +134,16 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
         TempValue = Round(s.CpuTempCelsius);
         TempToolTip = s.CpuTempCelsius is not null ? null : s.CpuTempStatus switch
         {
-            TemperatureStatus.NotAdmin => "Administrator হিসেবে চালাতে হবে",
-            TemperatureStatus.NoDriver => "PawnIO driver install করা নেই",
-            TemperatureStatus.NoSensor => "CPU temperature sensor পাওয়া যায়নি",
+            TemperatureStatus.NotAdmin => "Requires running as administrator",
+            TemperatureStatus.NoDriver => "PawnIO driver is not installed",
+            TemperatureStatus.NoSensor => "No CPU temperature sensor found",
             _ => null,
         };
 
         DownloadText = "↓ " + (s.DownloadBytesPerSec is { } d ? ByteFormatter.FormatSpeed(d) : NotAvailable);
         UploadText = "↑ " + (s.UploadBytesPerSec is { } u ? ByteFormatter.FormatSpeed(u) : NotAvailable);
 
-        // Drive: monitor শুধু ১০ সেকেন্ডে একবার নতুন list দেয়
+        // Drives: the monitor gives a new list only once every 10 seconds
         if (!ReferenceEquals(s.Drives, _lastDrives))
         {
             _lastDrives = s.Drives;
@@ -188,5 +188,5 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     private static double? Round(double? value) => value is { } v ? Math.Round(v) : null;
 }
 
-/// <summary>Overview এর নিচের drive list এর একটা সারি।</summary>
+/// <summary>One row of the drive list at the bottom of Overview.</summary>
 public sealed record DriveItem(string Name, string UsageText, double Percent, UsageLevel Level);

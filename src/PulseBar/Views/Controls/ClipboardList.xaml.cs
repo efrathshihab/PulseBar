@@ -10,7 +10,7 @@ using Wpf.Ui.Controls;
 
 namespace PulseBar.Views.Controls;
 
-/// <summary>Card এ click বা Enter: কোন item, আর Shift চাপা ছিল কিনা (তখন শুধু copy)।</summary>
+/// <summary>Click or Enter on a card: which item, and whether Shift was held (then copy only).</summary>
 public sealed class ClipboardItemActivatedEventArgs(ClipboardItemViewModel item, bool copyOnly) : EventArgs
 {
     public ClipboardItemViewModel Item { get; } = item;
@@ -26,20 +26,20 @@ public partial class ClipboardList : UserControl
     {
         InitializeComponent();
 
-        // ListBox নিজে mouse capture করে আর button event handled করে দিতে পারে, তাই
-        // handled event ও শোনা হয়। Selection এর উপর নির্ভর করা হয় না, যাতে আগে থেকে
-        // select করা card এ click করলেও copy হয়।
+        // The ListBox may capture the mouse itself and mark button events handled, so
+        // handled events are listened to as well. Selection isn't relied on, so clicking an
+        // already selected card still copies.
         ItemList.AddHandler(PreviewMouseLeftButtonDownEvent, new MouseButtonEventHandler(ItemList_MouseDown), handledEventsToo: true);
         ItemList.AddHandler(MouseLeftButtonUpEvent, new MouseButtonEventHandler(ItemList_MouseUp), handledEventsToo: true);
     }
 
     /// <summary>
-    /// Card এ click বা Enter হলে। কেউ না শুনলে item টা শুধু copy হয় (popup এর tab);
-    /// শুনলে কী হবে সেটা সে ঠিক করে (hotkey panel: copy, বন্ধ, paste)।
+    /// Raised on click or Enter on a card. If nobody listens, the item is just copied (the popup tab);
+    /// a listener decides what happens (hotkey panel: copy, close, paste).
     /// </summary>
     public event EventHandler<ClipboardItemActivatedEventArgs>? ItemActivated;
 
-    /// <summary>"Clear all" button দেখাবে কিনা। Confirm dialog এর জন্য window এ ContentDialogHost লাগে।</summary>
+    /// <summary>Whether to show the "Clear all" button. The confirm dialog needs a ContentDialogHost in the window.</summary>
     public bool ShowClearAll
     {
         get => ClearAllButton.Visibility == Visibility.Visible;
@@ -48,7 +48,7 @@ public partial class ClipboardList : UserControl
 
     private ClipboardViewModel? ViewModel => DataContext as ClipboardViewModel;
 
-    /// <summary>Search box এ keyboard focus দেয় (লেখা থাকলে সব select)।</summary>
+    /// <summary>Gives keyboard focus to the search box (selecting all text if any).</summary>
     public void FocusSearch()
     {
         SearchBox.Focus();
@@ -56,7 +56,7 @@ public partial class ClipboardList : UserControl
         SearchBox.SelectAll();
     }
 
-    /// <summary>বাছাই করা item টা দেখা যায় এমনভাবে scroll করে।</summary>
+    /// <summary>Scrolls so the selected item is visible.</summary>
     public void ScrollToSelected()
     {
         if (ViewModel?.SelectedItem is { } item)
@@ -91,14 +91,14 @@ public partial class ClipboardList : UserControl
         var pressed = _pressedItem;
         _pressedItem = null;
 
-        // চাপা আর ছাড়া একই card এ হতে হবে; delete button বা scrollbar এ হলে copy না
+        // Press and release must be on the same card; not a copy on the delete button or scrollbar
         if (pressed is not null && ReferenceEquals(CardItemAt(e.OriginalSource as DependencyObject), pressed))
         {
             Activate(pressed);
         }
     }
 
-    /// <summary>Click টা কোন card এর উপরে; button বা scrollbar এর উপরে হলে null।</summary>
+    /// <summary>Which card the click is over; null over a button or the scrollbar.</summary>
     private static ClipboardItemViewModel? CardItemAt(DependencyObject? source)
     {
         for (var node = source; node is not null; node = VisualOrLogicalParent(node))
@@ -144,7 +144,7 @@ public partial class ClipboardList : UserControl
                 break;
 
             case Key.Down when vm.Items.Count > 0:
-                // বাছাই করা item থাকলে (search এর পরে প্রথমটা) তার পরেরটায়, না থাকলে প্রথমটায়
+                // With a selected item (the first one after a search), go to the next one, otherwise the first
                 var current = vm.CurrentOrFirst();
                 int index = current is not null && ReferenceEquals(vm.SelectedItem, current) ? vm.Items.IndexOf(current) + 1 : 0;
                 vm.SelectedItem = vm.Items[Math.Clamp(index, 0, vm.Items.Count - 1)];
@@ -175,14 +175,14 @@ public partial class ClipboardList : UserControl
                 break;
 
             case Key.Up when vm.Items.IndexOf(selected) == 0:
-                // প্রথম item থেকে উপরে: আবার search box এ
+                // Up from the first item: back to the search box
                 FocusSearch();
                 e.Handled = true;
                 break;
         }
     }
 
-    /// <summary>বাছাই করা card এ keyboard focus দেয়, যাতে Up/Down সেখান থেকে চলে।</summary>
+    /// <summary>Gives keyboard focus to the selected card so Up/Down continue from there.</summary>
     private void FocusSelected()
     {
         if (ViewModel?.SelectedItem is not { } item)
@@ -193,7 +193,7 @@ public partial class ClipboardList : UserControl
 
         ItemList.ScrollIntoView(item);
 
-        // Virtualized list এ container টা layout এর পরে তৈরি হয়
+        // In a virtualized list the container is created after layout
         Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
         {
             if (ItemList.ItemContainerGenerator.ContainerFromItem(item) is ListBoxItem container)
@@ -214,7 +214,7 @@ public partial class ClipboardList : UserControl
         var dialog = new ContentDialog(host)
         {
             Title = "Clear all?",
-            Content = "সব clipboard history মুছে যাবে",
+            Content = "All clipboard history will be deleted",
             PrimaryButtonText = "Clear all",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,

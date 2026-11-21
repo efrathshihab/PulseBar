@@ -6,8 +6,8 @@ using PulseBar.Models;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Clipboard history disk এ রাখে: %LocalAppData%\PulseBar\clipboard\history.json আর images\।
-/// Save debounce করা হয় আর background thread এ হয়; file নষ্ট হলে খালি history দিয়ে শুরু।
+/// Keeps clipboard history on disk: %LocalAppData%\PulseBar\clipboard\history.json and images\.
+/// Saves are debounced and run on a background thread; a corrupt file starts with an empty history.
 /// </summary>
 public sealed class ClipboardStorage : IDisposable
 {
@@ -41,8 +41,8 @@ public sealed class ClipboardStorage : IDisposable
     public string ThumbnailPathFor(string id) => Path.Combine(ImagesDirectory, id + "_thumb.png");
 
     /// <summary>
-    /// History পড়ে (নতুনটা আগে)। ছবি হারানো item বাদ যায়, আর কোনো item এর না এমন ছবি মুছে যায়।
-    /// কোনো অবস্থাতেই exception ছোড়ে না।
+    /// Reads history (newest first). Items whose image is missing are dropped, and images not belonging to any item are deleted.
+    /// Never throws.
     /// </summary>
     public List<ClipboardItem> Load()
     {
@@ -64,7 +64,7 @@ public sealed class ClipboardStorage : IDisposable
                 }
                 catch (Exception ex) when (ex is JsonException or NotSupportedException or InvalidOperationException)
                 {
-                    // নষ্ট file: পরে দেখার জন্য সরিয়ে রেখে খালি history
+                    // Corrupt file: move it aside for later inspection and start empty
                     TryMove(HistoryPath, HistoryPath + ".corrupt");
                     items = [];
                 }
@@ -76,13 +76,13 @@ public sealed class ClipboardStorage : IDisposable
         }
         catch
         {
-            // Disk/permission সমস্যা: খালি history দিয়ে চলবে
+            // Disk/permission problem: run with an empty history
         }
 
         return items;
     }
 
-    /// <summary>কিছুক্ষণ পরে background এ save হবে; এর মধ্যে আবার ডাকলে শুধু সর্বশেষটা লেখা হয়।</summary>
+    /// <summary>Saves in the background a little later; calls in between only write the latest one.</summary>
     public void ScheduleSave(ClipboardItem[] items)
     {
         lock (_saveGate)
@@ -97,7 +97,7 @@ public sealed class ClipboardStorage : IDisposable
         }
     }
 
-    /// <summary>images folder এর সব file মুছে দেয় (Clear all)।</summary>
+    /// <summary>Deletes every file in the images folder (Clear all).</summary>
     public void DeleteAllImages()
     {
         try
@@ -114,11 +114,11 @@ public sealed class ClipboardStorage : IDisposable
         }
         catch
         {
-            // বাকি থাকলে পরের বার শুরুতে orphan হিসেবে মুছে যাবে
+            // Anything left over is deleted as an orphan at next startup
         }
     }
 
-    /// <summary>Item এর ছবি আর thumbnail মুছে দেয়।</summary>
+    /// <summary>Deletes the item's image and thumbnail.</summary>
     public static void DeleteFiles(ClipboardItem item)
     {
         TryDelete(item.ImagePath);
@@ -138,11 +138,11 @@ public sealed class ClipboardStorage : IDisposable
         }
         catch
         {
-            // পরের বার শুরুতে orphan হিসেবে মুছে যাবে
+            // Deleted as an orphan at next startup
         }
     }
 
-    /// <summary>বাকি থাকা save এখনই লিখে timer বন্ধ করে।</summary>
+    /// <summary>Writes any pending save now and stops the timer.</summary>
     public void Dispose()
     {
         lock (_saveGate)
@@ -173,14 +173,14 @@ public sealed class ClipboardStorage : IDisposable
             return;
         }
 
-        // একসাথে দুটো write যেন না হয় (timer আর Dispose)
+        // Never two writes at once (timer and Dispose)
         lock (_writeGate)
         {
             try
             {
                 Directory.CreateDirectory(RootDirectory);
 
-                // আগে temp file এ লিখে তারপর replace, যাতে মাঝপথে বন্ধ হলে file নষ্ট না হয়
+                // Write to a temp file first, then replace, so stopping halfway doesn't corrupt the file
                 string temp = HistoryPath + ".tmp";
                 using (var stream = File.Create(temp))
                 {
@@ -191,7 +191,7 @@ public sealed class ClipboardStorage : IDisposable
             }
             catch
             {
-                // Disk ভর্তি বা lock: পরের পরিবর্তনে আবার চেষ্টা হবে
+                // Disk full or locked: retried on the next change
             }
         }
     }
@@ -211,7 +211,7 @@ public sealed class ClipboardStorage : IDisposable
         };
     }
 
-    /// <summary>শুধু নিজেদের images folder এর file; history.json এ বাইরের path থাকলে মানা হবে না।</summary>
+    /// <summary>Only files in our own images folder; outside paths in history.json are not accepted.</summary>
     private bool IsOurImage(string? path) =>
         !string.IsNullOrEmpty(path) &&
         string.Equals(Path.GetDirectoryName(Path.GetFullPath(path)), ImagesDirectory, StringComparison.OrdinalIgnoreCase);

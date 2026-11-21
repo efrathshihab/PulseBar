@@ -15,7 +15,7 @@
              TextOptions.TextFormattingMode="Display"
              TextOptions.TextRenderingMode="Grayscale">
     <UserControl.Resources>
-        <!-- Code থেকে taskbar এর theme অনুযায়ী বদলানো হয় -->
+        <!-- Changed from code to match the taskbar theme -->
         <SolidColorBrush x:Key="OverlayLabelBrush" Color="#B3FFFFFF" />
         <SolidColorBrush x:Key="OverlayValueBrush" Color="#FFFFFFFF" />
 
@@ -40,10 +40,10 @@
         </Style>
     </UserControl.Resources>
 
-    <!-- প্রায় স্বচ্ছ background, যাতে পুরো জায়গায় click ধরা যায় -->
+    <!-- Nearly transparent background, so clicks register anywhere on it -->
     <Border Background="#01000000" Padding="4,0">
         <Grid>
-            <!-- Balanced: 2x2। নির্দিষ্ট চওড়া, যাতে সংখ্যা বদলালে লেখা না কাঁপে -->
+            <!-- Balanced: 2x2. Fixed widths so the text doesn't jiggle when numbers change -->
             <Grid x:Name="BalancedGrid" VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="24" />
@@ -72,7 +72,7 @@
                            Text="{Binding GpuTempText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
             </Grid>
 
-            <!-- Compact: CPU + RAM, এক সারিতে একটু বড় লেখা; চওড়া Balanced এর সমান -->
+            <!-- Compact: CPU + RAM in one row with slightly larger text; same width as Balanced -->
             <Grid x:Name="CompactGrid"
                   VerticalAlignment="Center"
                   Visibility="Collapsed"

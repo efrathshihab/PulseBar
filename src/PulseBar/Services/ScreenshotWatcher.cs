@@ -5,31 +5,31 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Windows এর Screenshots folder (Win+PrtSc, Snipping Tool এর auto-save) এ নতুন .png/.jpg এলে
-/// তার bytes পড়ে <c>onScreenshot</c> এ দেয়। শুধু নতুন file: app চালু হওয়ার আগের file ধরা হয় না।
+/// When a new .png/.jpg appears in Windows' Screenshots folder (Win+PrtSc, Snipping Tool auto-save),
+/// reads its bytes and passes them to <c>onScreenshot</c>. Only new files: files from before the app started are ignored.
 /// <para>
-/// ⚠️ User এর Screenshots folder এর কোনো file কখনো মোছা, সরানো বা বদলানো হয় না; শুধু পড়া হয়।
-/// History তে থাকে PulseBar এর নিজের copy।
+/// ⚠️ No file in the user's Screenshots folder is ever deleted, moved or changed; it is only read.
+/// History holds PulseBar's own copy.
 /// </para>
-/// File গুলো queue তে রেখে একটা একটা করে পড়া হয়; একসাথে অনেক এলে <see cref="MaxQueued"/> এর
-/// বেশিগুলো বাদ যায়। চুপচাপ থাকলে কোনো thread বা timer চলে না।
+/// Files are queued and read one at a time; if many arrive at once, those beyond <see cref="MaxQueued"/>
+/// are dropped. When idle, no thread or timer runs.
 /// </summary>
 public sealed class ScreenshotWatcher : IDisposable
 {
     public const int MaxQueued = 20;
 
-    // এর চেয়ে বড় file screenshot না, পড়াই হবে না
+    // Files bigger than this aren't screenshots and aren't read
     private const long MaxFileBytes = 64L * 1024 * 1024;
 
-    // লেখা শেষ হওয়ার অপেক্ষা: প্রথমে একটু থেমে, তারপর এতবার খোলার চেষ্টা
+    // Waiting for the write to finish: a short pause first, then this many open attempts
     private const int FirstDelayMs = 150;
     private const int OpenRetryCount = 10;
     private const int OpenRetryDelayMs = 200;
 
-    // এক file এর কাজ (ClipboardManager এর decode + save) এর বেশি নিলে পরেরটায়
+    // If one file's work (ClipboardManager's decode + save) takes longer than this, move to the next
     private static readonly TimeSpan HandlerTimeout = TimeSpan.FromSeconds(15);
 
-    // Rename এ আসা file এর তৈরির সময় app চালুর এর বেশি আগে হলে সেটা পুরনো file
+    // A renamed file created more than this long before app start is an old file
     private static readonly TimeSpan CreationSlack = TimeSpan.FromSeconds(2);
 
     private static readonly string[] Extensions = [".png", ".jpg", ".jpeg"];
@@ -46,20 +46,20 @@ public sealed class ScreenshotWatcher : IDisposable
     private bool _disposed;
 
     /// <param name="onScreenshot">
-    /// File এর bytes আর path। একটা একটা করে ডাকা হয় (background thread এ); ফেরত দেওয়া Task শেষ
-    /// হলে পরের file।
+    /// The file's bytes and path. Called one at a time (on a background thread); the next file starts when
+    /// the returned Task completes.
     /// </param>
-    /// <param name="folder">Test এর জন্য অন্য folder; null হলে Windows এর Screenshots folder।</param>
+    /// <param name="folder">Another folder for tests; null for Windows' Screenshots folder.</param>
     public ScreenshotWatcher(Func<byte[], string, Task> onScreenshot, string? folder = null)
     {
         _onScreenshot = onScreenshot;
         Folder = folder ?? GetScreenshotsFolder();
     }
 
-    /// <summary>যে folder দেখা হচ্ছে; পাওয়া না গেলে null।</summary>
+    /// <summary>The folder being watched; null if not found.</summary>
     public string? Folder { get; }
 
-    /// <summary>Folder দেখা চালু/বন্ধ। Folder না থাকলে চালু করলেও কিছু হয় না (log এ লেখা হয়)।</summary>
+    /// <summary>Turns folder watching on/off. If the folder doesn't exist, turning it on does nothing (it's logged).</summary>
     public bool IsEnabled
     {
         get => _enabled;
@@ -104,7 +104,7 @@ public sealed class ScreenshotWatcher : IDisposable
         _shutdown.Cancel();
     }
 
-    /// <summary>_gate এর ভেতরে ডাকা হয়।</summary>
+    /// <summary>Called inside _gate.</summary>
     private void StartWatcher()
     {
         if (Folder is null)
@@ -148,7 +148,7 @@ public sealed class ScreenshotWatcher : IDisposable
         }
     }
 
-    /// <summary>_gate এর ভেতরে ডাকা হয়।</summary>
+    /// <summary>Called inside _gate.</summary>
     private void StopWatcher()
     {
         if (_watcher is not { } watcher)
@@ -173,7 +173,7 @@ public sealed class ScreenshotWatcher : IDisposable
 
     private void OnCreated(object sender, FileSystemEventArgs e) => Enqueue(e.FullPath, renamed: false);
 
-    // কিছু tool আগে temp নামে লেখে, পরে .png নাম দেয়
+    // Some tools write a temp name first, then rename to .png
     private void OnRenamed(object sender, RenamedEventArgs e) => Enqueue(e.FullPath, renamed: true);
 
     private void OnError(object sender, ErrorEventArgs e) =>
@@ -186,7 +186,7 @@ public sealed class ScreenshotWatcher : IDisposable
             return;
         }
 
-        // আগে থেকে থাকা file এর নাম বদলালে সেটা নতুন screenshot না
+        // Renaming a file that already existed isn't a new screenshot
         if (renamed && !IsNewFile(path))
         {
             return;
@@ -214,7 +214,7 @@ public sealed class ScreenshotWatcher : IDisposable
             _processing = true;
         }
 
-        // শুধু কাজ থাকলে একটা thread pool thread; শেষ হলে কিছুই চলে না
+        // One thread pool thread only while there's work; nothing runs when done
         _ = Task.Run(ProcessQueueAsync);
     }
 
@@ -246,7 +246,7 @@ public sealed class ScreenshotWatcher : IDisposable
             }
             catch (OperationCanceledException)
             {
-                // বন্ধ হচ্ছে
+                // Shutting down
             }
             catch (Exception ex)
             {
@@ -269,7 +269,7 @@ public sealed class ScreenshotWatcher : IDisposable
 
             if (!File.Exists(path))
             {
-                // Temp file ছিল, বা লেখার পরেই সরিয়ে ফেলেছে
+                // It was a temp file, or was moved right after writing
                 return;
             }
 
@@ -291,8 +291,8 @@ public sealed class ScreenshotWatcher : IDisposable
     }
 
     /// <summary>
-    /// শুধু পড়ার জন্য খোলে, আর অন্য কাউকে লিখতে দেয় না (FileShare.Read): কেউ এখনো লিখছে হলে খোলা
-    /// fail করে, তখন null। File এ কোনো পরিবর্তন হয় না।
+    /// Opens for reading only and doesn't let anyone else write (FileShare.Read): if someone is still writing,
+    /// opening fails and returns null. The file is never changed.
     /// </summary>
     private static byte[]? TryRead(string path)
     {
@@ -331,7 +331,7 @@ public sealed class ScreenshotWatcher : IDisposable
         Extensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
-    /// SHGetKnownFolderPath(FOLDERID_Screenshots): OneDrive বা অন্য drive এ সরানো থাকলেও আসল path।
+    /// SHGetKnownFolderPath(FOLDERID_Screenshots): the real path even if moved to OneDrive or another drive.
     /// </summary>
     private static string? GetScreenshotsFolder()
     {

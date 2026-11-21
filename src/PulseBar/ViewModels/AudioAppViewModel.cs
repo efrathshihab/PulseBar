@@ -9,14 +9,14 @@ using PulseBar.Utilities;
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// Sound tab এর একটা row। Slider টানার সময় প্রতিটা নড়াচড়ায় COM call না করে ~৩০ ms এ একবার
-/// সর্বশেষ মান পাঠায়।
+/// One row of the Sound tab. While dragging the slider it sends the latest value about once every ~30 ms
+/// instead of a COM call on every movement.
 /// </summary>
 public sealed partial class AudioAppViewModel : ObservableObject
 {
     private static readonly TimeSpan PushInterval = TimeSpan.FromMilliseconds(30);
 
-    // User নিজে বদলানোর পর এতক্ষণ বাইরের (পুরনো) মান slider এ বসানো হবে না, যাতে টানার সময় লাফ না দেয়
+    // For this long after the user changes it, outside (stale) values aren't put on the slider, so it doesn't jump while dragging
     private const long UserHoldMs = 400;
 
     private readonly AudioController _controller;
@@ -60,10 +60,10 @@ public sealed partial class AudioAppViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsMuted { get; set; }
 
-    /// <summary>যেমন "65%"।</summary>
+    /// <summary>e.g. "65%".</summary>
     public string VolumeText => $"{Math.Round(Volume):0}%";
 
-    /// <summary>Controller এর নতুন মান বসায়; user এখন টানছে থাকলে volume টা বাদ।</summary>
+    /// <summary>Applies the controller's new value; the volume is skipped while the user is dragging.</summary>
     public void Apply(AudioAppSession app)
     {
         Name = app.Name;
@@ -85,7 +85,7 @@ public sealed partial class AudioAppViewModel : ObservableObject
         }
     }
 
-    /// <summary>Row সরানোর সময় বাকি থাকা মান পাঠিয়ে দেয়।</summary>
+    /// <summary>Sends any pending value when the row is removed.</summary>
     public void Flush()
     {
         if (_pushTimer.IsEnabled)
@@ -97,7 +97,7 @@ public sealed partial class AudioAppViewModel : ObservableObject
 
     partial void OnVolumeChanged(double value)
     {
-        // Controller থেকে আসা মান আবার controller এ পাঠানো হয় না
+        // Values that came from the controller aren't sent back to it
         if (_applying)
         {
             return;

@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Taskbar কোন কিনারায় আছে দেখে popup কে tray এর কাছের কোণায় বসায়; clipboard panel কে mouse cursor এর কাছে।
-/// সব হিসাব physical pixel এ, monitor এর নিজস্ব DPI দিয়ে, যাতে 125%/150% scaling এও ঠিক থাকে।
+/// Checks which edge the taskbar is on and places the popup in the corner near the tray; the clipboard panel near the mouse cursor.
+/// All math is in physical pixels with the monitor's own DPI, so it stays right at 125%/150% scaling.
 /// </summary>
 internal static class PopupPlacement
 {
@@ -48,15 +48,15 @@ internal static class PopupPlacement
         int x = edge == TaskbarEdge.Left ? work.Left + gap : work.Right - w - gap;
         int y = edge == TaskbarEdge.Top ? work.Top + gap : work.Bottom - h - gap;
 
-        // অন্য DPI এর monitor এ সরালে WPF নিজে size বদলাতে পারে, তাই দুবার বসানো হয়।
+        // When moved to a monitor with another DPI WPF may change the size itself, so it's placed twice.
         const uint flags = SWP_NOACTIVATE | SWP_NOOWNERZORDER;
         SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, flags);
         SetWindowPos(hwnd, HWND_TOPMOST, x, y, w, h, flags);
     }
 
     /// <summary>
-    /// Mouse cursor যে monitor এ, সেখানে cursor এর ডান-নিচে বসায়; জায়গা না থাকলে বাম বা উপরে
-    /// সরে, আর সবসময় সেই monitor এর work area (taskbar বাদে) এর ভেতরে থাকে।
+    /// Places it below-right of the cursor on the cursor's monitor; moves left or up if there's no room,
+    /// and always stays inside that monitor's work area (excluding the taskbar).
     /// </summary>
     public static void PlaceNearCursor(IntPtr hwnd, double widthDip, double heightDip)
     {

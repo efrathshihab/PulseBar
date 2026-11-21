@@ -31,7 +31,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         </Style>
 
-        <!-- Card এর নিচের ছোট লেখা; মান null হলে লুকানো -->
+        <!-- Small text under a card; hidden when the value is null -->
         <Style x:Key="Note" TargetType="TextBlock">
             <Setter Property="Margin" Value="4,2,4,4" />
             <Setter Property="FontSize" Value="11" />
@@ -71,7 +71,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Launch at login" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="With admin: CPU temperature দেখতে লাগে" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="With admin: needed for CPU temperature" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ComboBox ItemsSource="{Binding LaunchOptions}"
@@ -101,11 +101,11 @@
                 <Run Text=" · " />
                 <Hyperlink Command="{Binding FixLaunchCommand}"
                            Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
-                           TextDecorations="None">ঠিক করো</Hyperlink>
+                           TextDecorations="None">Fix</Hyperlink>
             </TextBlock>
 
             <TextBlock Style="{StaticResource Note}"
-                       Text="Debug build: login এ এই dev exe চালু হবে"
+                       Text="Debug build: this dev exe will start at login"
                        Foreground="{DynamicResource SystemFillColorCautionBrush}"
                        Visibility="{Binding ShowDebugWarning, Converter={StaticResource BoolToVisibility}}" />
 
@@ -125,7 +125,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Show on taskbar" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Tray এর পাশে live মান" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Live values next to the tray" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding Settings.ShowTaskbarOverlay}"
@@ -151,7 +151,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Clipboard history" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="বন্ধ করলে নতুন কিছু ধরবে না, পুরনোগুলো থাকবে" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="When off, nothing new is saved; existing items stay" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding Settings.ClipboardEnabled}"
@@ -162,7 +162,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Keep history for" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="এর চেয়ে পুরনো item মুছে যাবে" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Older items are deleted" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ComboBox ItemsSource="{Binding RetentionOptions}"
@@ -174,7 +174,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Panel hotkey" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Clipboard panel খোলে" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Opens the clipboard panel" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <controls:HotKeyBox DataContext="{Binding PanelHotKey}" />
@@ -184,7 +184,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Auto-paste" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Panel এ Enter দিলে সরাসরি paste" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Enter in the panel pastes directly" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding Settings.AutoPaste}"
@@ -198,7 +198,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Screenshot hotkey" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Area বেছে screenshot" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Select an area to capture" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <controls:HotKeyBox DataContext="{Binding ScreenshotHotKey}" />
@@ -208,7 +208,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Watch Screenshots folder" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Win+PrtSc এর ছবি history তে" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Add Win+PrtSc images to history" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding Settings.WatchScreenshotsFolder}"
@@ -219,7 +219,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Auto-copy" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="Folder এর নতুন ছবি clipboard এও" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Also copy new folder images to the clipboard" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:ToggleSwitch IsChecked="{Binding Settings.AutoCopyScreenshots}"
@@ -253,7 +253,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Reset to defaults" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="সব setting প্রথম অবস্থায়" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="Restore all settings to their defaults" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ui:Button Content="Reset" Click="Reset_Click" />

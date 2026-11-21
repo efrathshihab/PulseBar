@@ -10,24 +10,24 @@ using PulseBar.ViewModels;
 namespace PulseBar.Views;
 
 /// <summary>
-/// TaskbarOverlay কে primary taskbar (Shell_TrayWnd) এর child window হিসেবে বসায়।
-/// Child হওয়ায় taskbar এ click করলেও পেছনে যায় না, fullscreen এ taskbar এর সাথেই লুকায়,
-/// আর Alt+Tab/taskbar এ কখনো দেখায় না।
+/// Places TaskbarOverlay as a child window of the primary taskbar (Shell_TrayWnd).
+/// Being a child, it doesn't go behind when the taskbar is clicked, hides with the taskbar in fullscreen,
+/// and never shows in Alt+Tab or on the taskbar.
 /// </summary>
 /// <remarks>
-/// প্রতি snapshot (১ সেকেন্ড) এ জায়গা মিলিয়ে দেখা হয়, কারণ child window কে কেউ জানায় না
-/// কখন taskbar বড় হলো বা tray তে নতুন icon এসে notification area চওড়া হলো। আকার/অবস্থান না
-/// বদলালে SetWindowPos ডাকা হয় না। Explorer restart হলে পুরনো child নিজেই নষ্ট হয়ে যায়;
-/// "TaskbarCreated" এ (বা পরের tick এ) নতুন করে বানানো হয়।
+/// The position is checked on every snapshot (1 second), because nobody tells a child window when
+/// the taskbar grew or a new tray icon widened the notification area. SetWindowPos isn't called unless
+/// size/position changed. When Explorer restarts the old child is destroyed with it;
+/// it is recreated on "TaskbarCreated" (or the next tick).
 /// </remarks>
 public sealed class TaskbarOverlayHost : IDisposable
 {
     private const double GapDip = 8;
 
-    // TrayNotifyWnd না পেলে taskbar এর ডান দিক থেকে এতটা জায়গা notification area এর জন্য ধরা হয়
+    // Without TrayNotifyWnd, this much space from the taskbar's right edge is assumed for the notification area
     private const double FallbackTrayWidthDip = 200;
 
-    // Child window বানানো ব্যর্থ হলে প্রতি সেকেন্ডে আবার চেষ্টা না করে কিছুক্ষণ থামা
+    // If creating the child window fails, pause for a while instead of retrying every second
     private static readonly TimeSpan RetryDelay = TimeSpan.FromSeconds(10);
 
     private readonly AppState _state;
@@ -46,7 +46,7 @@ public sealed class TaskbarOverlayHost : IDisposable
     private DateTime _retryAfter = DateTime.MinValue;
     private int _tickQueued;
 
-    /// <summary>Overlay এ left-click করলে, UI thread থেকে।</summary>
+    /// <summary>Left-click on the overlay, from the UI thread.</summary>
     public event EventHandler? Clicked;
 
     public TaskbarOverlayHost(AppState state, Dispatcher dispatcher)
@@ -55,8 +55,8 @@ public sealed class TaskbarOverlayHost : IDisposable
         _dispatcher = dispatcher;
         _isLightTaskbar = TaskbarInterop.IsTaskbarLight();
 
-        // Broadcast message (TaskbarCreated, theme/display বদল) শুধু top-level window পায়,
-        // তাই একটা অদৃশ্য top-level window শুধু শোনার জন্য
+        // Broadcast messages (TaskbarCreated, theme/display changes) only reach top-level windows,
+        // so an invisible top-level window just for listening
         _messageWindow = new HwndSource(new HwndSourceParameters("PulseBarTaskbarWatcher")
         {
             WindowStyle = TaskbarInterop.WS_POPUP,
@@ -78,7 +78,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         _state.SnapshotUpdated += OnSnapshotUpdated;
     }
 
-    /// <summary>"Show on taskbar"। শুধু UI thread থেকে বদলাতে হবে।</summary>
+    /// <summary>"Show on taskbar". Change only from the UI thread.</summary>
     public bool IsEnabled
     {
         get => _enabled;
@@ -102,7 +102,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         }
     }
 
-    /// <summary>Compact (CPU + RAM) না Balanced (2x2)। UI thread থেকে।</summary>
+    /// <summary>Compact (CPU + RAM) or Balanced (2x2). UI thread.</summary>
     public OverlayLayout Layout
     {
         get => _layout;
@@ -143,7 +143,7 @@ public sealed class TaskbarOverlayHost : IDisposable
             return;
         }
 
-        // UI thread ব্যস্ত থাকলে tick জমতে দেওয়া হয় না; পরেরটা সর্বশেষ snapshot ই পড়বে
+        // Ticks don't pile up while the UI thread is busy; the next one reads the latest snapshot
         if (Interlocked.Exchange(ref _tickQueued, 1) == 1)
         {
             return;
@@ -156,7 +156,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         });
     }
 
-    /// <summary>দরকার হলে taskbar এ জুড়ে দেয়, জায়গা মেলায়, আর সর্বশেষ মান বসায়।</summary>
+    /// <summary>Attaches to the taskbar if needed, updates the position and sets the latest values.</summary>
     private void Refresh()
     {
         if (!_enabled || _disposed)
@@ -193,7 +193,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         var taskbar = TaskbarInterop.FindPrimaryTaskbar();
         if (taskbar == IntPtr.Zero)
         {
-            // Explorer এখনো চালু হয়নি; TaskbarCreated বা পরের tick এ আবার
+            // Explorer hasn't started yet; try again on TaskbarCreated or the next tick
             return;
         }
 
@@ -202,7 +202,7 @@ public sealed class TaskbarOverlayHost : IDisposable
             var parameters = new HwndSourceParameters("PulseBarTaskbarOverlay")
             {
                 ParentWindow = taskbar,
-                // WS_VISIBLE ছাড়া; জায়গা ঠিক হলে তবেই দেখানো হবে
+                // Without WS_VISIBLE; shown only once the position is right
                 WindowStyle = TaskbarInterop.WS_CHILD | TaskbarInterop.WS_CLIPSIBLINGS,
                 ExtendedWindowStyle = TaskbarInterop.WS_EX_TOOLWINDOW | TaskbarInterop.WS_EX_NOACTIVATE,
                 Width = 1,
@@ -258,7 +258,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         }
         catch
         {
-            // Explorer এর সাথে window আগেই নষ্ট হয়ে গেলে Dispose এ কিছু করার থাকে না
+            // If the window already died with Explorer, there's nothing left to Dispose
         }
     }
 
@@ -297,7 +297,7 @@ public sealed class TaskbarOverlayHost : IDisposable
             || !isBottom
             || isAutoHide)
         {
-            // আপাতত শুধু নিচের, সবসময় দেখানো taskbar
+            // For now only a bottom, always-visible taskbar
             return Placement.Hidden;
         }
 
@@ -332,7 +332,7 @@ public sealed class TaskbarOverlayHost : IDisposable
         switch (msg)
         {
             case TaskbarInterop.WM_MOUSEACTIVATE:
-                // Click এ taskbar বা popup এর focus কেড়ে নেবে না
+                // A click doesn't steal focus from the taskbar or the popup
                 handled = true;
                 return TaskbarInterop.MA_NOACTIVATE;
 
@@ -348,7 +348,7 @@ public sealed class TaskbarOverlayHost : IDisposable
     {
         if (_taskbarCreatedMessage != 0 && msg == (int)_taskbarCreatedMessage)
         {
-            // Explorer নতুন করে চালু হয়েছে
+            // Explorer restarted
             ScheduleRefresh(reattach: true);
             return IntPtr.Zero;
         }
@@ -361,7 +361,7 @@ public sealed class TaskbarOverlayHost : IDisposable
                     UpdateTheme();
                 }
 
-                // Taskbar এর অবস্থান/auto-hide বদলালেও এই message আসে
+                // This message also arrives when the taskbar position/auto-hide changes
                 ScheduleRefresh(reattach: false);
                 break;
 
@@ -375,7 +375,7 @@ public sealed class TaskbarOverlayHost : IDisposable
 
     private void ScheduleRefresh(bool reattach)
     {
-        // Explorer নিজের layout শেষ করার পরে মাপা হয়
+        // Measured after Explorer finishes its own layout
         _dispatcher.BeginInvoke(DispatcherPriority.Background, () =>
         {
             if (reattach)
@@ -390,8 +390,8 @@ public sealed class TaskbarOverlayHost : IDisposable
     }
 
     /// <summary>
-    /// লেখার রং সবসময় Windows এর taskbar এর রং (SystemUsesLightTheme) অনুসরণ করে, PulseBar এর
-    /// Theme setting না; না হলে dark taskbar এ কালো লেখা পড়া যেত না।
+    /// The text color always follows the Windows taskbar color (SystemUsesLightTheme), not PulseBar's
+    /// Theme setting; otherwise dark text on a dark taskbar would be unreadable.
     /// </summary>
     private void UpdateTheme()
     {

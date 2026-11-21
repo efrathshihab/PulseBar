@@ -18,40 +18,40 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Clipboard এ নতুন কিছু এলে (WM_CLIPBOARDUPDATE) text বা ছবি ধরে history তে রাখে।
-/// Message শোনা হয় UI thread এর একটা message-only window এ; পড়া, ছবি encode আর save হয়
-/// একটা আলাদা background thread এ, যাতে বড় ছবিতেও UI না আটকায়।
+/// Captures new clipboard text or images (WM_CLIPBOARDUPDATE) into the history.
+/// Messages arrive on a message-only window on the UI thread; reading, image encoding and saving
+/// happen on a separate background thread so large images never block the UI.
 /// </summary>
 public sealed class ClipboardManager : IDisposable
 {
     public const int MaxItems = 200;
-    public const int MaxTextBytes = 1024 * 1024;          // UTF-8 এ ১ MB
-    public const long MaxImageFileBytes = 20L * 1024 * 1024; // save হওয়া PNG ২০ MB
+    public const int MaxTextBytes = 1024 * 1024;          // 1 MB in UTF-8
+    public const long MaxImageFileBytes = 20L * 1024 * 1024; // 20 MB saved PNG
     public const int ThumbnailWidth = 240;
 
-    /// <summary>এর চেয়ে পুরনো item নিজে থেকে মুছে যায়; Settings থেকে <see cref="Retention"/> বদলানো যায়।</summary>
+    /// <summary>Items older than this are removed automatically; <see cref="Retention"/> can be changed from Settings.</summary>
     public static readonly TimeSpan DefaultRetention = TimeSpan.FromHours(24);
 
     private static readonly TimeSpan RetentionCheckInterval = TimeSpan.FromMinutes(10);
 
-    // এর চেয়ে বড় raw bitmap memory তেই আনা হবে না (৪K screenshot এর DIB ~৩৩ MB, তাই ২০ MB এ আটকানো যায় না)
+    // Raw bitmaps bigger than this are never loaded (a 4K screenshot DIB is ~33 MB, so 20 MB is too small)
     private const long MaxRawImageBytes = 128L * 1024 * 1024;
 
     private const int OpenRetryCount = 5;
     private const int OpenRetryDelayMs = 60;
 
-    // একসাথে অনেকগুলো update এলে (কিছু app কয়েকবার লেখে) শেষেরটাই পড়া হয়
+    // When many updates arrive together (some apps write several times), only the last one is read
     private const int CoalesceDelayMs = 80;
 
-    // Win+Shift+S একই ছবি clipboard এ দেয় আবার Screenshots folder এও save করে। দুই দিক থেকে
-    // আসা একই মাপের ছবি এর মধ্যে এলে একই ধরা হয় (PNG এর bytes আলাদা হতে পারে)।
+    // Win+Shift+S puts the same image on the clipboard and also saves it to the Screenshots folder.
+    // Images of the same size from both sides within this window count as the same (PNG bytes may differ).
     private const long SameSizeWindowMs = 5_000;
 
-    // Pixel hash মিলিয়ে duplicate খোঁজা হয় এতক্ষণের ছবিতে
+    // How long recent images are kept for pixel-hash duplicate checks
     private const long RecentImageWindowMs = 60_000;
     private const int MaxRecentImages = 16;
 
-    // এদের থেকে আসা clipboard ছবি screenshot (Win+Shift+S, Snipping Tool)
+    // Clipboard images from these are screenshots (Win+Shift+S, Snipping Tool)
     private static readonly string[] ScreenshotTools = ["ScreenClippingHost.exe", "SnippingTool.exe"];
 
     private readonly ClipboardStorage _storage;
@@ -63,8 +63,8 @@ public sealed class ClipboardManager : IDisposable
     private IntPtr _ownerHwnd;
     private Dispatcher? _uiDispatcher;
 
-    // বন্ধ হওয়ার সময় worker এর অপেক্ষমাণ UI-thread কাজ বাতিল করে, যাতে Dispose (UI thread) আর
-    // worker একে অপরের জন্য অপেক্ষা করে আটকে না থাকে
+    // Cancels the worker's pending UI-thread work on shutdown, so Dispose (UI thread) and the
+    // worker never wait on each other
     private readonly CancellationTokenSource _shutdown = new();
     private volatile bool _clipboardChanged;
     private List<ClipboardItem> _items = [];
@@ -73,10 +73,10 @@ public sealed class ClipboardManager : IDisposable
     private uint _lastSequence;
     private bool _handledImage;
 
-    // WM_CLIPBOARDUPDATE এর সময়ের owner এর exe; Screen Clipping পড়ার আগেই বন্ধ হয়ে যেতে পারে
+    // Owner exe at WM_CLIPBOARDUPDATE time; Screen Clipping may exit before we read it
     private volatile string? _notifiedOwnerExe;
 
-    // সাম্প্রতিক ছবি, duplicate চেনার জন্য; শুধু worker thread এ ব্যবহার হয়
+    // Recent images for duplicate detection; used only on the worker thread
     private readonly List<RecentImage> _recentImages = [];
     private volatile bool _disposed;
 
@@ -88,7 +88,7 @@ public sealed class ClipboardManager : IDisposable
     private long _retentionTicks = DefaultRetention.Ticks;
     private volatile bool _captureEnabled = true;
 
-    /// <summary>এর চেয়ে পুরনো item মুছে যায়। কমালে সাথে সাথে পুরনোগুলো মোছা হয়। যেকোনো thread থেকে।</summary>
+    /// <summary>Items older than this are removed. Lowering it removes old items right away. Any thread.</summary>
     public TimeSpan Retention
     {
         get => TimeSpan.FromTicks(Interlocked.Read(ref _retentionTicks));
@@ -107,7 +107,7 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// বন্ধ থাকলে clipboard এর নতুন কিছু history তে ধরা হয় না; পুরনো history থাকে আর copy/delete চলে।
+    /// When off, nothing new from the clipboard is added to history; existing history stays and copy/delete still work.
     /// </summary>
     public bool IsCaptureEnabled
     {
@@ -116,7 +116,7 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// History বদলালে। সাধারণত background thread থেকে আসে; Copy/Delete/Clear এ যে thread ডাকে সেখান থেকে।
+    /// Raised when the history changes. Usually from a background thread; for Copy/Delete/Clear, from the calling thread.
     /// </summary>
     public event EventHandler? HistoryChanged;
 
@@ -131,7 +131,7 @@ public sealed class ClipboardManager : IDisposable
         }
     }
 
-    /// <summary>এই মুহূর্তের history এর কপি, নতুনটা আগে।</summary>
+    /// <summary>A copy of the current history, newest first.</summary>
     public ClipboardItem[] GetItems()
     {
         lock (_gate)
@@ -140,7 +140,7 @@ public sealed class ClipboardManager : IDisposable
         }
     }
 
-    /// <summary>UI thread থেকে ডাকতে হবে।</summary>
+    /// <summary>Must be called from the UI thread.</summary>
     public void Start()
     {
         if (_window is not null || _disposed)
@@ -150,7 +150,7 @@ public sealed class ClipboardManager : IDisposable
 
         _uiDispatcher = Dispatcher.CurrentDispatcher;
 
-        // Disk থেকে load আর সব capture একই background thread এ, ক্রমানুসারে
+        // Loading from disk and all captures run in order on the same background thread
         _worker = new Thread(WorkerLoop)
         {
             IsBackground = true,
@@ -180,7 +180,7 @@ public sealed class ClipboardManager : IDisposable
         }
         catch (Exception ex)
         {
-            // Listener না পেলে clipboard history চলবে না, তবে app চলবে
+            // Without a listener clipboard history won't work, but the app keeps running
             Log.Error("Clipboard listener", ex);
         }
     }
@@ -242,16 +242,16 @@ public sealed class ClipboardManager : IDisposable
 
         lock (_gate)
         {
-            // Load এর আগেই কিছু ধরা পড়লে সেগুলো উপরে থাকবে
+            // Anything captured before loading finished stays on top
             _items.AddRange(loaded);
         }
 
         HistoryChanged?.Invoke(this, EventArgs.Empty);
 
-        // শুরুতে clipboard এ যা আছে সেটা নতুন copy না, তাই ধরা হবে না
+        // Whatever is on the clipboard at startup is not a new copy, so it isn't captured
         _lastSequence = GetClipboardSequenceNumber();
 
-        // শুরুতে একবার, তারপর প্রতি ১০ মিনিটে পুরনো item মোছা
+        // Once at startup, then every 10 minutes, remove old items
         PurgeExpired();
         _retentionTimer = new Timer(_ => Enqueue(PurgeExpired), null, RetentionCheckInterval, RetentionCheckInterval);
 
@@ -294,7 +294,7 @@ public sealed class ClipboardManager : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    // অদ্ভুত data তে কোনো অবস্থাতেই app crash করবে না
+                    // Odd data must never crash the app
                     Log.Error("Clipboard capture", ex);
                 }
             }
@@ -308,9 +308,9 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// Item টা আবার clipboard এ দেয়; সফল হলে সবার উপরে তোলে। ছবির ক্ষেত্রে PNG আর DIB দুটো format দেয়।
-    /// তৈরির কাজ (disk থেকে পুরো ছবি পড়া, DIB বানানো) worker thread এ; clipboard খোলা আর লেখা
-    /// UI thread এ, যে thread এর window clipboard এর owner হবে। ফল: সফল হলে null, না হলে কারণ।
+    /// Puts the item back on the clipboard and moves it to the top on success. Images get both PNG and DIB.
+    /// Preparation (reading the full image from disk, building the DIB) runs on the worker thread; opening and
+    /// writing the clipboard runs on the UI thread, whose window becomes the owner. Result: null on success, otherwise the reason.
     /// </summary>
     public Task<string?> CopyToClipboardAsync(string id)
     {
@@ -322,7 +322,7 @@ public sealed class ClipboardManager : IDisposable
 
         if (item is null)
         {
-            return Task.FromResult<string?>("Item আর history তে নেই");
+            return Task.FromResult<string?>("Item is no longer in history");
         }
 
         var result = new TaskCompletionSource<string?>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -340,7 +340,7 @@ public sealed class ClipboardManager : IDisposable
 
             if (error is null)
             {
-                // নিজের copy capture এ বাদ পড়ে, তাই উপরে তোলা এখানেই
+                // Our own copy is skipped by capture, so it is moved to the top here
                 Promote(id);
             }
             else
@@ -353,13 +353,13 @@ public sealed class ClipboardManager : IDisposable
 
         if (!queued)
         {
-            result.TrySetResult("App বন্ধ হচ্ছে");
+            result.TrySetResult("PulseBar is closing");
         }
 
         return result.Task;
     }
 
-    /// <summary>Item কে নতুন সময় দিয়ে সবার উপরে তোলে।</summary>
+    /// <summary>Moves the item to the top with a new timestamp.</summary>
     private void Promote(string id)
     {
         ClipboardItem[] snapshot;
@@ -381,7 +381,7 @@ public sealed class ClipboardManager : IDisposable
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Item আর তার ছবি মুছে দেয়।</summary>
+    /// <summary>Deletes the item and its image.</summary>
     public void Delete(string id)
     {
         ClipboardItem removed;
@@ -404,7 +404,7 @@ public sealed class ClipboardManager : IDisposable
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>সব item মুছে images folder খালি করে।</summary>
+    /// <summary>Deletes all items and empties the images folder.</summary>
     public void ClearAll()
     {
         lock (_gate)
@@ -432,12 +432,12 @@ public sealed class ClipboardManager : IDisposable
         }
         catch (ObjectDisposedException)
         {
-            // বন্ধ হওয়ার মাঝে; কাজটা আর হবে না
+            // Shutting down; the work will not run
             return false;
         }
     }
 
-    /// <summary><see cref="Retention"/> এর চেয়ে পুরনো item আর তাদের ছবি মোছে। Worker thread এ চলে।</summary>
+    /// <summary>Removes items older than <see cref="Retention"/> and their images. Runs on the worker thread.</summary>
     private void PurgeExpired()
     {
         var cutoff = DateTimeOffset.Now - Retention;
@@ -464,17 +464,17 @@ public sealed class ClipboardManager : IDisposable
         HistoryChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    /// <summary>Worker thread এ চলে। সফল হলে null, না হলে কারণ।</summary>
+    /// <summary>Runs on the worker thread. Null on success, otherwise the reason.</summary>
     private string? WriteToClipboard(ClipboardItem item)
     {
         if (item.Kind == ClipboardItemKind.Text)
         {
             if (item.Text is not { } text)
             {
-                return "Text item এ লেখা নেই";
+                return "Text item has no text";
             }
 
-            // UTF-16, শেষে null অক্ষর
+            // UTF-16 with a trailing null character
             var bytes = new byte[(text.Length + 1) * sizeof(char)];
             MemoryMarshal.AsBytes(text.AsSpan()).CopyTo(bytes);
             return SetClipboard([(CfUnicodeText, bytes)]);
@@ -482,12 +482,12 @@ public sealed class ClipboardManager : IDisposable
 
         if (item.ImagePath is not { } path)
         {
-            return "Image item এ ImagePath নেই";
+            return "Image item has no ImagePath";
         }
 
         if (!File.Exists(path))
         {
-            return $"ছবির file পাওয়া যায়নি: {path}";
+            return $"Image file not found: {path}";
         }
 
         _handledImage = true;
@@ -499,11 +499,11 @@ public sealed class ClipboardManager : IDisposable
             dib = ToDib(decoder.Frames[0]);
         }
 
-        // PNG: Chrome, Discord, Word (transparency সহ); DIB: Paint আর পুরনো app
+        // PNG: Chrome, Discord, Word (with transparency); DIB: Paint and older apps
         return SetClipboard([(PngFormat, png), (CfDib, dib)]);
     }
 
-    /// <summary>32bpp bottom-up BITMAPINFOHEADER DIB বানায়।</summary>
+    /// <summary>Builds a 32bpp bottom-up BITMAPINFOHEADER DIB.</summary>
     private static byte[] ToDib(BitmapSource source)
     {
         BitmapSource bgra = source.Format == PixelFormats.Bgra32
@@ -519,14 +519,14 @@ public sealed class ClipboardManager : IDisposable
         var header = dib.AsSpan(0, headerSize);
         BinaryPrimitives.WriteInt32LittleEndian(header, headerSize);
         BinaryPrimitives.WriteInt32LittleEndian(header[4..], width);
-        BinaryPrimitives.WriteInt32LittleEndian(header[8..], height); // ধনাত্মক = নিচের সারি আগে
+        BinaryPrimitives.WriteInt32LittleEndian(header[8..], height); // positive = bottom row first
         BinaryPrimitives.WriteInt16LittleEndian(header[12..], 1);
         BinaryPrimitives.WriteInt16LittleEndian(header[14..], 32);
         BinaryPrimitives.WriteInt32LittleEndian(header[20..], stride * height);
 
         bgra.CopyPixels(dib, stride, headerSize);
 
-        // WPF উপরের সারি আগে দেয়, DIB এর জন্য সারিগুলো উল্টানো হয়
+        // WPF gives the top row first, so rows are flipped for the DIB
         var row = new byte[stride];
         for (int top = 0, bottom = height - 1; top < bottom; top++, bottom--)
         {
@@ -541,15 +541,15 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// Worker thread থেকে ডাকা হয়। প্রতিটা চেষ্টা UI thread এ চলে (owner window ওই thread এর,
-    /// আর সে message pump করে, তাই অন্য app এর EmptyClipboard আটকায় না)। অন্য app clipboard খুলে
-    /// রাখলে চেষ্টার মাঝে worker এ অপেক্ষা হয়, UI আটকায় না। সফল হলে null, না হলে কারণ।
+    /// Called from the worker thread. Each attempt runs on the UI thread (the owner window belongs to it
+    /// and pumps messages, so other apps' EmptyClipboard isn't blocked). If another app holds the clipboard,
+    /// the wait between attempts happens on the worker, not the UI. Null on success, otherwise the reason.
     /// </summary>
     private string? SetClipboard((uint Format, byte[] Data)[] formats)
     {
         if (_uiDispatcher is not { } dispatcher || _ownerHwnd == IntPtr.Zero)
         {
-            return "Clipboard window তৈরি হয়নি";
+            return "Clipboard window was not created";
         }
 
         string? error = null;
@@ -557,7 +557,7 @@ public sealed class ClipboardManager : IDisposable
         {
             if (_disposed)
             {
-                return "App বন্ধ হচ্ছে";
+                return "PulseBar is closing";
             }
 
             bool retry = false;
@@ -567,7 +567,7 @@ public sealed class ClipboardManager : IDisposable
             }
             catch (OperationCanceledException)
             {
-                return "App বন্ধ হচ্ছে";
+                return "PulseBar is closing";
             }
 
             if (error is null || !retry)
@@ -578,10 +578,10 @@ public sealed class ClipboardManager : IDisposable
             Thread.Sleep(OpenRetryDelayMs * (attempt + 1));
         }
 
-        return $"{error} ({OpenRetryCount} বার চেষ্টার পরে)";
+        return $"{error} (after {OpenRetryCount} attempts)";
     }
 
-    /// <summary>UI thread এ একবার চেষ্টা। Clipboard অন্য কেউ খুলে রাখলে <paramref name="retry"/> = true।</summary>
+    /// <summary>One attempt on the UI thread. <paramref name="retry"/> = true if someone else has the clipboard open.</summary>
     private string? TrySetClipboard((uint Format, byte[] Data)[] formats, out bool retry)
     {
         retry = false;
@@ -589,7 +589,7 @@ public sealed class ClipboardManager : IDisposable
         {
             int code = Marshal.GetLastPInvokeError();
             retry = true;
-            return $"OpenClipboard failed (Win32 {code}), clipboard খুলে রেখেছে: {DescribeWindowProcess(GetOpenClipboardWindow())}";
+            return $"OpenClipboard failed (Win32 {code}), clipboard held by: {DescribeWindowProcess(GetOpenClipboardWindow())}";
         }
 
         try
@@ -622,7 +622,7 @@ public sealed class ClipboardManager : IDisposable
                 Marshal.Copy(data, 0, ptr, data.Length);
                 GlobalUnlock(memory);
 
-                // সফল হলে memory এর মালিক system; না হলে নিজেদেরই ছাড়তে হবে
+                // On success the system owns the memory; otherwise we must free it
                 if (SetClipboardData(format, memory) == IntPtr.Zero)
                 {
                     int code = Marshal.GetLastPInvokeError();
@@ -643,12 +643,12 @@ public sealed class ClipboardManager : IDisposable
     {
         if (hwnd == IntPtr.Zero)
         {
-            // OpenClipboard(NULL) দিয়ে খুললে কোন app সেটা Windows জানায় না
-            return "অজানা app (window ছাড়া খুলেছে)";
+            // Windows doesn't say which app opened it with OpenClipboard(NULL)
+            return "Unknown app (opened without a window)";
         }
 
         GetWindowThreadProcessId(hwnd, out uint pid);
-        return pid == (uint)Environment.ProcessId ? "PulseBar নিজে" : ResolveAppName(pid) ?? $"PID {pid}";
+        return pid == (uint)Environment.ProcessId ? "PulseBar itself" : ResolveAppName(pid) ?? $"PID {pid}";
     }
 
     private void Capture()
@@ -688,7 +688,7 @@ public sealed class ClipboardManager : IDisposable
             _handledImage = true;
             string hash = Convert.ToHexString(SHA256.HashData(data));
 
-            // একই ছবি আবার হলে encode এর খরচই লাগবে না
+            // The same image again costs no encoding
             if (TryPromote(ClipboardItemKind.Image, hash))
             {
                 return;
@@ -699,12 +699,12 @@ public sealed class ClipboardManager : IDisposable
                 return;
             }
 
-            // Owner পড়ার সময় বন্ধ হয়ে গেলে notification এর সময়েরটা
+            // If the owner exited before we read it, use the one from notification time
             string? ownerExe = Path.GetFileName(GetProcessPath(raw.OwnerProcessId)) ?? _notifiedOwnerExe;
             bool isScreenshot = IsScreenshotTool(ownerExe);
             string? pixelHash = isScreenshot ? PixelHash(frame) : null;
 
-            // Folder এর file আগে এসে গেলে একই screenshot দ্বিতীয়বার না
+            // If the folder file arrived first, don't add the same screenshot twice
             if (isScreenshot && FindRecentDuplicate(frame, pixelHash, fromClipboard: true) is { } existingId)
             {
                 Log.Info("Screenshot from clipboard is already in history (from the Screenshots folder)");
@@ -722,11 +722,11 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// Screenshots folder এর নতুন file বা নিজের নেওয়া screenshot history তে যোগ করে
-    /// (<see cref="ClipboardItem.IsScreenshot"/> = true)। একই ছবি আগেই থাকলে (Win+Shift+S clipboard
-    /// এও দেয়) নতুন item হয় না। <paramref name="copyToClipboard"/> হলে নতুন item টা clipboard এও
-    /// দেয় (PNG + DIB); সেটা নিজের লেখা, তাই listener আবার নতুন item বানায় না।
-    /// ফল: নতুন item যোগ হলে true। কোনো অবস্থাতেই exception ছোড়ে না।
+    /// Adds a new Screenshots folder file or our own screenshot to history
+    /// (<see cref="ClipboardItem.IsScreenshot"/> = true). If the same image is already there (Win+Shift+S also
+    /// puts it on the clipboard), no new item is added. With <paramref name="copyToClipboard"/>, the new item is
+    /// also put on the clipboard (PNG + DIB); that is our own write, so the listener doesn't add it again.
+    /// Result: true if a new item was added. Never throws.
     /// </summary>
     public Task<bool> AddScreenshotAsync(byte[] data, string? sourceApp, bool copyToClipboard)
     {
@@ -752,7 +752,7 @@ public sealed class ClipboardManager : IDisposable
         return result.Task;
     }
 
-    /// <summary>Worker thread এ চলে।</summary>
+    /// <summary>Runs on the worker thread.</summary>
     private bool AddScreenshot(byte[] data, string? sourceApp, bool copyToClipboard)
     {
         _handledImage = true;
@@ -774,7 +774,7 @@ public sealed class ClipboardManager : IDisposable
         existingId ??= FindRecentDuplicate(frame, pixelHash, fromClipboard: false);
         if (existingId is not null)
         {
-            // যেমন Win+Shift+S: ছবিটা আগেই clipboard থেকে এসেছে, এখন শুধু screenshot চিহ্ন
+            // e.g. Win+Shift+S: the image already came from the clipboard, now just mark it as a screenshot
             Log.Info("Screenshot is already in history; not added again");
             MarkScreenshot(existingId);
             return false;
@@ -798,7 +798,7 @@ public sealed class ClipboardManager : IDisposable
         return true;
     }
 
-    /// <summary>Item কে screenshot হিসেবে চিহ্নিত করে (আগে থেকে না থাকলে)।</summary>
+    /// <summary>Marks the item as a screenshot (if it isn't already).</summary>
     private void MarkScreenshot(string id)
     {
         ClipboardItem[] snapshot;
@@ -832,8 +832,8 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// একই ছবি সম্প্রতি এসেছে কিনা: একই pixel hash, অথবা অন্য দিক থেকে (clipboard বনাম folder)
-    /// ৫ সেকেন্ডের মধ্যে একই মাপের ছবি। এখনো history তে থাকা item এর id দেয়।
+    /// Whether the same image arrived recently: the same pixel hash, or an image of the same size from the
+    /// other side (clipboard vs folder) within 5 seconds. Returns the id of an item still in history.
     /// </summary>
     private string? FindRecentDuplicate(BitmapSource frame, string? pixelHash, bool fromClipboard)
     {
@@ -866,8 +866,8 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// Decode করা pixel এর SHA-256 (alpha বাদে), যাতে একই ছবি PNG আর DIB/অন্য encoder এ এলেও মেলে।
-    /// একবারে পুরো ছবি না, কয়েক সারি করে পড়া হয়।
+    /// SHA-256 of the decoded pixels (without alpha), so the same image matches as PNG, DIB or another encoder.
+    /// Reads a few rows at a time instead of the whole image at once.
     /// </summary>
     internal static string PixelHash(BitmapSource frame)
     {
@@ -895,7 +895,7 @@ public sealed class ClipboardManager : IDisposable
                 int length = rows * stride;
                 bgra.CopyPixels(new Int32Rect(0, y, width, rows), buffer, stride, 0);
 
-                // কোনো encoder alpha 0 রাখে, কেউ 255; screenshot এ alpha এর মানে নেই
+                // Some encoders keep alpha 0, some 255; alpha means nothing in a screenshot
                 for (int i = 3; i < length; i += 4)
                 {
                     buffer[i] = 0;
@@ -915,7 +915,7 @@ public sealed class ClipboardManager : IDisposable
     private static bool IsScreenshotTool(string? exeName) =>
         exeName is not null && ScreenshotTools.Contains(exeName, StringComparer.OrdinalIgnoreCase);
 
-    /// <summary>এই মুহূর্তের clipboard owner এর exe এর নাম; নিজে হলে বা না পেলে null। UI thread এ, খুব কম খরচে।</summary>
+    /// <summary>Exe name of the current clipboard owner; null if it's us or unknown. UI thread, very cheap.</summary>
     private static string? OwnerExeNow()
     {
         IntPtr owner = GetClipboardOwner();
@@ -932,8 +932,8 @@ public sealed class ClipboardManager : IDisposable
         data.Length > 8 && data[0] == 0x89 && data[1] == (byte)'P' && data[2] == (byte)'N' && data[3] == (byte)'G';
 
     /// <summary>
-    /// ছবি decode করে। <paramref name="isPng"/> null হলে format নিজে থেকে চেনা হয় (PNG, JPG ইত্যাদি)।
-    /// নষ্ট বা অস্বাভাবিক বড় হলে null।
+    /// Decodes an image. If <paramref name="isPng"/> is null the format is detected (PNG, JPG and so on).
+    /// Null if corrupt or unusually large.
     /// </summary>
     internal static BitmapSource? Decode(byte[] data, bool? isPng)
     {
@@ -963,7 +963,7 @@ public sealed class ClipboardManager : IDisposable
         }
     }
 
-    /// <param name="png">ছবিটা আগে থেকেই PNG হলে তার bytes; তখন আবার encode না করে হুবহু লেখা হয়।</param>
+    /// <param name="png">The bytes if the image is already PNG; then they are written as-is without re-encoding.</param>
     private ClipboardItem? SaveImage(BitmapSource frame, byte[]? png, string hash, string? sourceApp, bool isScreenshot)
     {
         string id = NewId();
@@ -976,7 +976,7 @@ public sealed class ClipboardManager : IDisposable
 
             if (png is not null)
             {
-                // আগে থেকেই PNG, আবার encode না করে হুবহু লেখা হয় (alpha ঠিক থাকে)
+                // Already PNG: written as-is without re-encoding (keeps alpha intact)
                 File.WriteAllBytes(imagePath, png);
             }
             else
@@ -1022,8 +1022,8 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// ৪K ছবির raw bytes (LOH) আর WIC এর native buffer GC নিজে থেকে অনেক দেরিতে ছাড়ে,
-    /// তাই ছবির কাজ শেষে একবার পুরো collect করে memory ফেরত দেওয়া হয়।
+    /// The GC releases raw bytes of 4K images (LOH) and WIC's native buffers very late,
+    /// so after image work a full collection returns the memory.
     /// </summary>
     private static void ReleaseImageMemory()
     {
@@ -1044,8 +1044,8 @@ public sealed class ClipboardManager : IDisposable
     private bool TryPromote(ClipboardItemKind kind, string hash) => AddOrPromote(kind, hash, create: null);
 
     /// <summary>
-    /// একই hash এর item থাকলে সেটাকে নতুন সময় দিয়ে সবার উপরে তোলে (true ফেরত দেয়)।
-    /// না থাকলে আর <paramref name="create"/> দেওয়া থাকলে নতুন item যোগ করে।
+    /// If an item with the same hash exists, moves it to the top with a new timestamp (returns true).
+    /// Otherwise, if <paramref name="create"/> is given, adds a new item.
     /// </summary>
     private bool AddOrPromote(ClipboardItemKind kind, string hash, Func<ClipboardItem>? create)
     {
@@ -1095,13 +1095,13 @@ public sealed class ClipboardManager : IDisposable
         return promoted;
     }
 
-    // ---------------- Clipboard পড়া ----------------
+    // ---------------- Reading the clipboard ----------------
 
     private sealed record RawClipboard(string? Text, byte[]? ImageData, bool ImageIsPng, uint OwnerProcessId);
 
     private static RawClipboard? ReadClipboard()
     {
-        // অন্য app clipboard খুলে রাখলে (CLIPBRD_E_CANT_OPEN এর অবস্থা) একটু পরপর কয়েকবার চেষ্টা
+        // If another app holds the clipboard (CLIPBRD_E_CANT_OPEN), retry a few times shortly after
         bool opened = false;
         for (int attempt = 0; attempt < OpenRetryCount; attempt++)
         {
@@ -1121,7 +1121,7 @@ public sealed class ClipboardManager : IDisposable
 
         try
         {
-            // Password manager ইত্যাদি history তে রাখতে মানা করেছে
+            // Password managers and the like asked not to be kept in history
             if (IsClipboardFormatAvailable(ExcludeFromMonitorFormat))
             {
                 return null;
@@ -1140,7 +1140,7 @@ public sealed class ClipboardManager : IDisposable
                 GetWindowThreadProcessId(owner, out ownerPid);
             }
 
-            // PulseBar নিজে copy করলে নতুন item হবে না
+            // No new item when PulseBar itself copied
             if (ownerPid == (uint)Environment.ProcessId)
             {
                 return null;
@@ -1151,7 +1151,7 @@ public sealed class ClipboardManager : IDisposable
                 var text = ReadText(GetClipboardData(CfUnicodeText), out bool tooLarge);
                 if (tooLarge)
                 {
-                    // বিশাল text (যেমন বড় Excel range) এর বদলে তার ছবিও নেওয়া হবে না
+                    // For huge text (like a big Excel range), its image isn't taken either
                     return null;
                 }
 
@@ -1192,7 +1192,7 @@ public sealed class ClipboardManager : IDisposable
 
         long size = (long)GlobalSize(handle);
 
-        // UTF-16 এ ২ MB এর বেশি মানে ১০ লাখের বেশি অক্ষর, UTF-8 এ নিশ্চিতভাবে ১ MB পার
+        // More than 2 MB in UTF-16 means over a million characters, definitely over 1 MB in UTF-8
         if (size > 2L * MaxTextBytes + 16)
         {
             tooLarge = true;
@@ -1228,7 +1228,7 @@ public sealed class ClipboardManager : IDisposable
         }
     }
 
-    /// <summary>Clipboard এর memory থেকে bytes কপি করে; শুরুতে <paramref name="headerSize"/> bytes খালি রাখে।</summary>
+    /// <summary>Copies bytes from clipboard memory, leaving <paramref name="headerSize"/> bytes empty at the start.</summary>
     private static byte[]? ReadBytes(IntPtr handle, long maxBytes, int headerSize)
     {
         if (handle == IntPtr.Zero)
@@ -1284,8 +1284,8 @@ public sealed class ClipboardManager : IDisposable
     }
 
     /// <summary>
-    /// CF_DIB এর আগে BITMAPFILEHEADER বসায়, যাতে WPF এর BMP decoder সেটা পড়তে পারে।
-    /// Header অদ্ভুত হলে false।
+    /// Prepends a BITMAPFILEHEADER to CF_DIB so WPF's BMP decoder can read it.
+    /// False if the header looks odd.
     /// </summary>
     private static bool WriteBmpFileHeader(byte[] buffer)
     {
@@ -1305,7 +1305,7 @@ public sealed class ClipboardManager : IDisposable
             return false;
         }
 
-        // BITMAPINFOHEADER এর পরে আলাদা color mask থাকে (V4/V5 header এ mask header এর ভেতরেই)
+        // After a BITMAPINFOHEADER separate color masks follow (in V4/V5 headers the masks are inside the header)
         long masks = headerSize == 40
             ? compression switch { BiBitfields => 12, BiAlphaBitfields => 16, _ => 0 }
             : 0;
@@ -1366,7 +1366,7 @@ public sealed class ClipboardManager : IDisposable
             return null;
         }
 
-        // Limited query admin ছাড়াও অন্য user/elevated process এ সাধারণত কাজ করে
+        // Limited query usually works on other users'/elevated processes without admin
         IntPtr process = OpenProcess(ProcessQueryLimitedInformation, false, processId);
         if (process == IntPtr.Zero)
         {

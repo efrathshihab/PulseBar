@@ -11,12 +11,12 @@ using Wpf.Ui.Controls;
 namespace PulseBar.Views;
 
 /// <summary>
-/// Tray এর পাশে খোলা Fluent popup। একবারই বানানো হয়, এরপর শুধু Hide/Show।
+/// The Fluent popup next to the tray. Created once, then only Hide/Show.
 /// </summary>
 public partial class PopupWindow : FluentWindow
 {
-    // Popup খোলা অবস্থায় tray icon এ click করলে আগে Deactivated চলে popup লুকায়,
-    // তারপর click event আসে। এই সময়ের মধ্যে আসা click কে "আবার খোলো" ধরা হবে না।
+    // Clicking the tray icon while the popup is open first deactivates and hides the popup,
+    // then the click event arrives. A click within this time doesn't count as "open again".
     private const long ReopenGuardMs = 300;
 
     private long _lastHiddenAt;
@@ -40,7 +40,7 @@ public partial class PopupWindow : FluentWindow
         Tabs.SizeChanged += (_, _) => SpreadTabs();
     }
 
-    /// <summary>৪টা tab কে পুরো চওড়ায় সমানভাবে ছড়ায়।</summary>
+    /// <summary>Spreads the 4 tabs evenly across the full width.</summary>
     private void SpreadTabs()
     {
         int count = Tabs.Items.Count;
@@ -49,13 +49,13 @@ public partial class PopupWindow : FluentWindow
             return;
         }
 
-        // TabItem এর নিজস্ব margin বাদ দিয়ে, rounding এর জন্য ১px কম, যাতে দ্বিতীয় সারিতে না যায়
+        // Minus the TabItem's own margin, and 1px less for rounding, so it doesn't wrap to a second row
         foreach (TabItem tab in Tabs.Items)
         {
             double margin = tab.Margin.Left + tab.Margin.Right;
             tab.Width = Math.Max(0, Math.Floor(Tabs.ActualWidth / count - margin) - 1);
 
-            // WPF-UI এর template এ header এর presenter বাম দিকে বাঁধা থাকে, তাই মাঝখানে আনা হয়
+            // WPF-UI's template pins the header presenter to the left, so it is centered
             tab.ApplyTemplate();
             if (tab.Template?.FindName("ContentSite", tab) is FrameworkElement site)
             {
@@ -82,14 +82,14 @@ public partial class PopupWindow : FluentWindow
 
     public void ShowPopup()
     {
-        // প্রথমবার handle বানানোর জন্য পর্দার বাইরে Show, তারপর সঠিক জায়গায় সরানো।
+        // The first time, Show off-screen to create the handle, then move to the right place.
         if (new WindowInteropHelper(this).Handle == IntPtr.Zero)
         {
             Left = -10000;
             Top = -10000;
         }
 
-        // Show এর আগে, যাতে ViewModel সর্বশেষ মান আগেই বসাতে পারে
+        // Before Show, so the ViewModel can set the latest values first
         AppState.Current.IsPopupVisible = true;
 
         Show();
@@ -112,7 +112,7 @@ public partial class PopupWindow : FluentWindow
         _lastHiddenAt = Environment.TickCount64;
     }
 
-    /// <summary>App বন্ধ হওয়ার সময় সত্যিই window close করতে দেয়।</summary>
+    /// <summary>Lets the window really close when the app shuts down.</summary>
     public void CloseForShutdown()
     {
         _allowClose = true;
@@ -133,7 +133,7 @@ public partial class PopupWindow : FluentWindow
 
     protected override void OnClosing(CancelEventArgs e)
     {
-        // Alt+F4 ইত্যাদিতে window নষ্ট না করে শুধু লুকানো হবে।
+        // Alt+F4 and the like only hide the window instead of destroying it.
         if (!_allowClose)
         {
             e.Cancel = true;

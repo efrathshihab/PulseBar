@@ -5,9 +5,9 @@ using PulseBar.Models;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Background এ প্রতি ১ সেকেন্ডে CPU, RAM, network আর GPU, প্রতি ১০ সেকেন্ডে drive পড়ে
-/// (CPU/GPU temperature আলাদা <see cref="TemperatureMonitor"/> থেকে, প্রতি ২ সেকেন্ডে)
-/// সরাসরি <see cref="AppState"/> এ লেখে (background thread থেকে)।
+/// Reads CPU, RAM, network and GPU every second and drives every 10 seconds in the background
+/// (CPU/GPU temperature comes separately from <see cref="TemperatureMonitor"/>, every 2 seconds)
+/// and writes straight into <see cref="AppState"/> (from a background thread).
 /// </summary>
 public sealed class SystemMonitor : IDisposable
 {
@@ -72,7 +72,7 @@ public sealed class SystemMonitor : IDisposable
         }
         catch (AggregateException)
         {
-            // Cancel হওয়ার exception, উপেক্ষা
+            // Cancellation exception, ignore
         }
 
         _cts?.Dispose();
@@ -82,7 +82,7 @@ public sealed class SystemMonitor : IDisposable
     public void Dispose()
     {
         Stop();
-        _temperature.Dispose(); // ভেতরে Computer.Close()
+        _temperature.Dispose(); // calls Computer.Close() inside
         _network.Dispose();
         _gpu?.Dispose();
         _gpu = null;
@@ -90,14 +90,14 @@ public sealed class SystemMonitor : IDisposable
 
     private async Task RunAsync(CancellationToken token)
     {
-        // GPU (DXGI + PDH) চালু করা একটু ধীর, তাই UI thread এ না, এখানে
+        // Starting the GPU (DXGI + PDH) is a bit slow, so it happens here instead of on the UI thread
         _gpu ??= new GpuMonitor();
 
-        // Main GPU এর নাম জেনে তবেই temperature শুরু, যাতে একাধিক GPU তে ঠিকটা বাছে
+        // Temperature starts only after the main GPU name is known, so the right one is picked with several GPUs
         _temperature.PreferredGpuName = _gpu.Name;
         _temperature.Start();
 
-        // প্রথম CPU আর network sample এর ভিত্তি; এরপর প্রথম tick থেকেই মান পাওয়া যাবে
+        // Baseline for the first CPU and network sample; values are available from the first tick
         ReadCpuPercent();
         _network.TryRead(out _, out _);
 
@@ -111,7 +111,7 @@ public sealed class SystemMonitor : IDisposable
         }
         catch (OperationCanceledException)
         {
-            // Stop() এ স্বাভাবিক থামা
+            // Normal stop from Stop()
         }
     }
 
@@ -158,7 +158,7 @@ public sealed class SystemMonitor : IDisposable
                 return null;
             }
 
-            // kernel time এর ভেতরে idle time ও ধরা থাকে
+            // kernel time also includes idle time
             ulong total = kernel + user;
             double? result = null;
 
@@ -201,7 +201,7 @@ public sealed class SystemMonitor : IDisposable
         }
         catch
         {
-            // N/A থাকবে
+            // Stays N/A
         }
     }
 
@@ -254,7 +254,7 @@ public sealed class SystemMonitor : IDisposable
             }
             catch
             {
-                // এই drive বাদ, বাকিগুলো চলবে
+                // Skip this drive, the rest keep working
             }
         }
 
@@ -275,7 +275,7 @@ public sealed class SystemMonitor : IDisposable
         public ulong ullAvailExtendedVirtual;
     }
 
-    // FILETIME (দুটো 32-bit) কে সরাসরি 64-bit হিসেবে পড়া হচ্ছে
+    // FILETIME (two 32-bit values) read directly as 64-bit
     [DllImport("kernel32.dll", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetSystemTimes(out ulong idleTime, out ulong kernelTime, out ulong userTime);

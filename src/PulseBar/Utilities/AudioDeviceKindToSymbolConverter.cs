@@ -5,7 +5,7 @@ using Wpf.Ui.Controls;
 
 namespace PulseBar.Utilities;
 
-/// <summary>Output device এর ধরন থেকে Fluent icon।</summary>
+/// <summary>Fluent icon for the output device kind.</summary>
 public sealed class AudioDeviceKindToSymbolConverter : IValueConverter
 {
     public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture) =>

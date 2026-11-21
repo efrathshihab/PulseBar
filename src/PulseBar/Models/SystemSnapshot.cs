@@ -1,7 +1,7 @@
 namespace PulseBar.Models;
 
 /// <summary>
-/// এক মুহূর্তের system অবস্থা। কোনো মান পড়া না গেলে সেটা null থাকে (UI তে "N/A")।
+/// The system state at one moment. A value that can't be read stays null ("N/A" in the UI).
 /// </summary>
 public sealed record SystemSnapshot(
     double? CpuPercent,
@@ -20,7 +20,7 @@ public sealed record SystemSnapshot(
     double? GpuTempCelsius,
     DateTime Timestamp);
 
-/// <summary>একটা fixed drive এর ব্যবহার। Name যেমন "C:\"।</summary>
+/// <summary>Usage of one fixed drive. Name is e.g. "C:\".</summary>
 public sealed record DriveUsage(
     string Name,
     string Label,
@@ -28,7 +28,7 @@ public sealed record DriveUsage(
     ulong TotalBytes,
     double Percent);
 
-/// <summary>CPU temperature কেন পাওয়া গেল বা গেল না।</summary>
+/// <summary>Why the CPU temperature was or wasn't available.</summary>
 public enum TemperatureStatus
 {
     Starting,

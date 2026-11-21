@@ -10,7 +10,7 @@ public enum ClipboardItemKind
 }
 
 /// <summary>
-/// Clipboard history এর একটা item। Immutable; উপরে তোলার সময় নতুন CreatedAt দিয়ে কপি বানানো হয়।
+/// One clipboard history item. Immutable; moving it to the top makes a copy with a new CreatedAt.
 /// </summary>
 public sealed record ClipboardItem
 {
@@ -20,30 +20,30 @@ public sealed record ClipboardItem
 
     public required ClipboardItemKind Kind { get; init; }
 
-    /// <summary>Text item এর পুরো লেখা; ছবি হলে null।</summary>
+    /// <summary>The full text of a text item; null for images.</summary>
     public string? Text { get; init; }
 
-    /// <summary>পুরো ছবির PNG file এর path; text হলে null।</summary>
+    /// <summary>Path of the full image PNG file; null for text.</summary>
     public string? ImagePath { get; init; }
 
-    /// <summary>ছোট (চওড়া ~240px) PNG thumbnail এর path; text হলে null।</summary>
+    /// <summary>Path of the small (~240px wide) PNG thumbnail; null for text.</summary>
     public string? ThumbnailPath { get; init; }
 
-    /// <summary>Text এর প্রথম ~২০০ অক্ষর; ছবি হলে যেমন "1920 × 1080"।</summary>
+    /// <summary>The first ~200 characters of text; for images e.g. "1920 × 1080".</summary>
     public string Preview { get; init; } = string.Empty;
 
-    /// <summary>কোন app থেকে copy হয়েছে, পাওয়া গেলে।</summary>
+    /// <summary>The app it was copied from, if known.</summary>
     public string? SourceApp { get; init; }
 
     public required DateTimeOffset CreatedAt { get; init; }
 
     /// <summary>
-    /// Snipping Tool / Screen Clipping থেকে এসেছে, বা Screenshots folder এর নতুন file। পুরনো
-    /// history.json এ এই field নেই, তখন false।
+    /// Came from Snipping Tool / Screen Clipping, or is a new file from the Screenshots folder. Older
+    /// history.json files don't have this field, so it's false then.
     /// </summary>
     public bool IsScreenshot { get; init; }
 
-    /// <summary>একই জিনিস দ্বিতীয়বার copy হলে চেনার জন্য SHA-256 (hex)।</summary>
+    /// <summary>SHA-256 (hex) to recognize the same content copied a second time.</summary>
     public required string ContentHash { get; init; }
 
     public static string MakePreview(string text) =>

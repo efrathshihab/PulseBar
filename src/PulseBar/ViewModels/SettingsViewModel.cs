@@ -10,13 +10,13 @@ using PulseBar.Utilities;
 
 namespace PulseBar.ViewModels;
 
-/// <summary>ComboBox এর একটা option।</summary>
+/// <summary>One ComboBox option.</summary>
 public sealed record Option<T>(T Value, string Label);
 
 /// <summary>
-/// Settings tab। সাধারণ মান গুলো সরাসরি <see cref="Settings"/> এ bind করা; App সেগুলোর বদল
-/// সাথে সাথে service এ বসায়। Launch at login আর hotkey এর কাজ fail করতে পারে, তাই ওগুলো
-/// এখান থেকে service দিয়ে বদলানো হয়, আর সফল হলে তবেই setting বদলায়।
+/// The Settings tab. Simple values are bound directly to <see cref="Settings"/>; App applies their changes
+/// to the services right away. Launch at login and hotkeys can fail, so they are changed
+/// through their services from here, and the setting changes only on success.
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 {
@@ -63,9 +63,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     public IReadOnlyList<Option<ClipboardRetention>> RetentionOptions { get; } =
     [
-        new(ClipboardRetention.OneHour, "1 ঘণ্টা"),
-        new(ClipboardRetention.TwentyFourHours, "24 ঘণ্টা"),
-        new(ClipboardRetention.SevenDays, "7 দিন"),
+        new(ClipboardRetention.OneHour, "1 hour"),
+        new(ClipboardRetention.TwentyFourHours, "24 hours"),
+        new(ClipboardRetention.SevenDays, "7 days"),
     ];
 
     public IReadOnlyList<Option<LaunchAtLogin>> LaunchOptions { get; } =
@@ -78,7 +78,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public string VersionText { get; }
 
     /// <summary>
-    /// ComboBox এর মান। বদলালে Run key/task বদলানো শুরু হয়; fail বা UAC তে "No" দিলে আগের মানে ফেরে।
+    /// The ComboBox value. Changing it starts updating the Run key/task; on failure or "No" in UAC it reverts.
     /// </summary>
     public LaunchAtLogin LaunchAtLogin
     {
@@ -102,18 +102,18 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 
     public bool IsLaunchEnabled => !IsLaunchBusy;
 
-    /// <summary>শেষ বদলের ফল (যেমন UAC তে No); কিছু না থাকলে null।</summary>
+    /// <summary>Result of the last change (such as No in UAC); null if none.</summary>
     [ObservableProperty]
     public partial string? LaunchMessage { get; private set; }
 
-    /// <summary>শুরুর check এ পাওয়া সমস্যা (admin ছাড়া ঠিক করা যায়নি); "ঠিক করো" দিয়ে আবার চেষ্টা।</summary>
+    /// <summary>A problem found by the startup check (couldn't fix without admin); "Fix" tries again.</summary>
     [ObservableProperty]
     public partial string? LaunchIssue { get; private set; }
 
     [ObservableProperty]
     public partial bool ShowDebugWarning { get; private set; }
 
-    /// <summary>App শুরুর check এর ফল। UI thread থেকে।</summary>
+    /// <summary>Result of the startup check. UI thread.</summary>
     public void SetLaunchIssue(string? issue) => LaunchIssue = issue;
 
     [RelayCommand]
@@ -145,7 +145,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         ShellOpen(Log.Directory);
     }
 
-    /// <summary>সব setting default এ (confirm এর পরে)। Launch at login Off হয়, তাতে UAC আসতে পারে।</summary>
+    /// <summary>All settings to default (after confirming). Launch at login becomes Off, which may show UAC.</summary>
     public async Task ResetToDefaultsAsync()
     {
         Log.Info("Settings: reset to defaults");
@@ -175,7 +175,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         LaunchMessage = null;
         try
         {
-            // Registry, COM আর schtasks UI thread এ না
+            // Registry, COM and schtasks stay off the UI thread
             var result = await Task.Run(() => _startup.ApplyAsync(mode));
             if (result.Outcome == StartupApplyOutcome.Ok)
             {
@@ -185,10 +185,10 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
                 return;
             }
 
-            // আগের মানে ফেরা; Run key আর task আগের মতোই আছে
+            // Revert; the Run key and task are unchanged
             _launchAtLogin = previous;
             OnPropertyChanged(nameof(LaunchAtLogin));
-            LaunchMessage = result.Message ?? "বদলানো যায়নি";
+            LaunchMessage = result.Message ?? "Couldn't change it";
             _notify(LaunchMessage);
         }
         finally

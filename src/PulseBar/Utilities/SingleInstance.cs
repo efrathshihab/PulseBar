@@ -6,14 +6,14 @@ using Microsoft.Win32.SafeHandles;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// একসাথে একটাই PulseBar চালায়। দ্বিতীয়টা চালু হলে প্রথমটাকে সংকেত পাঠিয়ে popup খোলায়।
+/// Runs only one PulseBar at a time. When a second one starts, it signals the first to open its popup.
 /// </summary>
 /// <remarks>
-/// Admin হিসেবে চলা process এর বানানো object সাধারণ process খুলতে পারে না (DACL আর
-/// integrity level দুটোর কারণেই)। তাই Mutex আর Event নিজস্ব security দিয়ে বানানো হয়:
-/// শুধু এই user, SYSTEM আর Administrators, আর Medium integrity label, যাতে admin আর
-/// সাধারণ দুই অবস্থাতেই একে অপরকে দেখতে পায়। .NET এর MutexAcl এই label বসাতে
-/// বাড়তি privilege চায়, তাই সরাসরি Win32 API।
+/// Objects created by an admin process can't be opened by a normal process (because of both the DACL and
+/// the integrity level). So the Mutex and Events are created with their own security:
+/// only this user, SYSTEM and Administrators, plus a Medium integrity label, so admin and
+/// normal instances can see each other. .NET's MutexAcl needs an extra privilege to set this label,
+/// so the Win32 API is used directly.
 /// </remarks>
 internal sealed class SingleInstance : IDisposable
 {
@@ -37,11 +37,11 @@ internal sealed class SingleInstance : IDisposable
     }
 
     /// <summary>
-    /// প্রথম instance হলে object ফেরত দেয়। আগে থেকে কেউ চললে:
-    /// <paramref name="replaceExisting"/> false হলে তাকে popup খোলার সংকেত পাঠিয়ে null ফেরত দেয়
-    /// (তখন এই process বন্ধ হবে); true হলে (Debug build) তাকে Quit করতে বলে, সর্বোচ্চ ৫ সেকেন্ড
-    /// অপেক্ষা করে নিজেই প্রথম instance হয়। <paramref name="activateExisting"/> false হলে (login এ
-    /// চালু হওয়া) আগেরটার popup খোলানো হয় না।
+    /// Returns an object if this is the first instance. If one is already running:
+    /// with <paramref name="replaceExisting"/> false, signals it to open its popup and returns null
+    /// (this process then exits); with true (Debug build), asks it to Quit, waits up to 5 seconds
+    /// and becomes the first instance itself. With <paramref name="activateExisting"/> false (started
+    /// at login), the running one's popup isn't opened.
     /// </summary>
     public static SingleInstance? TryAcquire(bool replaceExisting, bool activateExisting = true)
     {
@@ -68,12 +68,12 @@ internal sealed class SingleInstance : IDisposable
                 var mutex = CreateMutexW(ref attributes, false, MutexName);
                 int error = Marshal.GetLastWin32Error();
 
-                // ACCESS_DENIED মানে আছে কিন্তু খুলতে পারছি না, সেটাও "আগে থেকে চলছে"
+                // ACCESS_DENIED means it exists but can't be opened, which also means "already running"
                 bool exists = mutex.IsInvalid ? error == ERROR_ACCESS_DENIED : error == ERROR_ALREADY_EXISTS;
 
                 if (mutex.IsInvalid && !exists)
                 {
-                    // অন্য কোনো কারণে Mutex বানানো গেল না: single instance ছাড়াই চলবে
+                    // Couldn't create the Mutex for some other reason: run without single-instance protection
                     mutex.Dispose();
                     Log.Error($"Single instance mutex failed (Win32 {error}), running unguarded");
                     return Unguarded();
@@ -89,7 +89,7 @@ internal sealed class SingleInstance : IDisposable
                     return Create(mutex, ref attributes);
                 }
 
-                // আমাদের handle থাকলে Mutex টা বেঁচে থাকে, তাই অপেক্ষার সময় ছেড়ে দিতে হবে
+                // Our handle keeps the Mutex alive, so release it while waiting
                 mutex.Dispose();
 
                 if (!replaceExisting)
@@ -147,7 +147,7 @@ internal sealed class SingleInstance : IDisposable
         var handle = CreateEventW(ref attributes, false, false, name);
         if (handle.IsInvalid)
         {
-            // নাম ছাড়া event: অন্য instance সংকেত দিতে পারবে না, তবে app চলবে
+            // Unnamed event: other instances can't signal, but the app keeps running
             handle.Dispose();
             return new EventWaitHandle(false, EventResetMode.AutoReset);
         }
@@ -155,13 +155,13 @@ internal sealed class SingleInstance : IDisposable
         return new EventWaitHandle(false, EventResetMode.AutoReset) { SafeWaitHandle = handle };
     }
 
-    /// <summary>দ্বিতীয় instance চালু হওয়ার চেষ্টা করলে (background thread থেকে) ডাকা হয়।</summary>
+    /// <summary>Called (from a background thread) when a second instance tries to start.</summary>
     public void ListenForActivation(Action onActivate)
     {
         _showWait = ThreadPool.RegisterWaitForSingleObject(_showEvent, (_, _) => onActivate(), null, Timeout.Infinite, executeOnlyOnce: false);
     }
 
-    /// <summary>নতুন Debug build চালু হয়ে এটাকে বন্ধ হতে বললে (background thread থেকে) ডাকা হয়।</summary>
+    /// <summary>Called (from a background thread) when a newer Debug build starts and asks this one to exit.</summary>
     public void ListenForQuit(Action onQuit)
     {
         _quitWait = ThreadPool.RegisterWaitForSingleObject(_quitEvent, (_, _) => onQuit(), null, Timeout.Infinite, executeOnlyOnce: true);
@@ -176,7 +176,7 @@ internal sealed class SingleInstance : IDisposable
         _mutex.Dispose();
     }
 
-    /// <summary>Mutex ছাড়া চলার জন্য (crash না করে); তখন একাধিক instance আটকানো যাবে না।</summary>
+    /// <summary>For running without the Mutex (instead of crashing); multiple instances can't be prevented then.</summary>
     private static SingleInstance Unguarded()
     {
         return new SingleInstance(
@@ -187,7 +187,7 @@ internal sealed class SingleInstance : IDisposable
 
     private static void SignalExisting(string eventName, bool allowForeground)
     {
-        // চালু থাকা PulseBar যেন popup কে সামনে আনতে পারে
+        // So the running PulseBar can bring its popup to the front
         if (allowForeground)
         {
             AllowSetForegroundWindow(ASFW_ANY);
@@ -204,8 +204,8 @@ internal sealed class SingleInstance : IDisposable
     {
         string user = WindowsIdentity.GetCurrent().User?.Value ?? "IU";
 
-        // DACL: SYSTEM, Administrators, এই user, সবার full access
-        // SACL: Medium integrity label, No-Write-Up, যাতে admin এর object এ সাধারণ process লিখতে পারে
+        // DACL: full access for SYSTEM, Administrators and this user
+        // SACL: Medium integrity label, No-Write-Up, so normal processes can write to admin-created objects
         return $"D:(A;;GA;;;SY)(A;;GA;;;BA)(A;;GA;;;{user})S:(ML;;NW;;;ME)";
     }
 

@@ -13,20 +13,20 @@ public enum HotKeyChangeResult
 {
     Ok,
 
-    /// <summary>Modifier নেই বা key টা hotkey হতে পারে না।</summary>
+    /// <summary>No modifier, or the key can't be a hotkey.</summary>
     Invalid,
 
-    /// <summary>অন্য feature এ এই hotkey আছে।</summary>
+    /// <summary>Another feature already uses this hotkey.</summary>
     Duplicate,
 
-    /// <summary>RegisterHotKey fail: সাধারণত অন্য app নিয়ে রেখেছে।</summary>
+    /// <summary>RegisterHotKey failed: usually another app holds it.</summary>
     InUse,
 }
 
 /// <summary>
-/// কোন feature এ কোন global hotkey, তা <see cref="AppSettings"/> এর সাথে মিলিয়ে রাখে।
-/// নতুন hotkey আগে register করে দেখে; পারলে তবেই পুরনোটা ছাড়ে আর setting বদলায়।
-/// শুধু UI thread থেকে।
+/// Keeps which global hotkey belongs to which feature in sync with <see cref="AppSettings"/>.
+/// A new hotkey is registered first; only if that works is the old one released and the setting changed.
+/// UI thread only.
 /// </summary>
 public sealed class HotKeyBindings : IDisposable
 {
@@ -41,7 +41,7 @@ public sealed class HotKeyBindings : IDisposable
         _settings = settings;
     }
 
-    /// <summary>কোনো hotkey এর register অবস্থা বা মান বদলালে।</summary>
+    /// <summary>Raised when any hotkey's registration state or value changes.</summary>
     public event EventHandler? Changed;
 
     public static HotKey DefaultFor(HotKeyAction action) => action == HotKeyAction.ClipboardPanel
@@ -52,11 +52,11 @@ public sealed class HotKeyBindings : IDisposable
         ? _settings.ClipboardPanelHotKey
         : _settings.ScreenshotHotKey;
 
-    /// <summary>Setting এর hotkey register হয়ে আছে কিনা (অন্য app নিয়ে রাখলে false)। Suspend এর সময় true ধরা হয়।</summary>
+    /// <summary>Whether the setting's hotkey is registered (false if another app holds it). Treated as true while suspended.</summary>
     public bool IsRegistered(HotKeyAction action) =>
         _entries.TryGetValue(action, out var entry) && (entry.Id != 0 || _suspended && entry.Works);
 
-    /// <summary>Setting এর hotkey register করে। Fail করলে false, setting যেমন ছিল থাকে।</summary>
+    /// <summary>Registers the setting's hotkey. On failure returns false and the setting stays as it was.</summary>
     public bool Bind(HotKeyAction action, Action callback)
     {
         var entry = new Entry(callback);
@@ -89,7 +89,7 @@ public sealed class HotKeyBindings : IDisposable
             return HotKeyChangeResult.Ok;
         }
 
-        // নিজের পুরনোটা এখনো register করা থাকলেও নতুনটা আলাদা, তাই সংঘর্ষ নেই
+        // Even if our old one is still registered, the new one is different, so there's no conflict
         if (!_manager.TryRegister(hotKey, entry.Callback, out int newId))
         {
             return HotKeyChangeResult.InUse;
@@ -104,7 +104,7 @@ public sealed class HotKeyBindings : IDisposable
         entry.Works = true;
         if (_suspended)
         {
-            // Hotkey বাছাইয়ের সময় চাপলে যেন panel না খোলে; Resume এ আবার register
+            // So pressing it while picking a hotkey doesn't open the panel; registered again on Resume
             _manager.Unregister(newId);
             entry.Id = 0;
         }
@@ -115,7 +115,7 @@ public sealed class HotKeyBindings : IDisposable
     }
 
     /// <summary>
-    /// Hotkey বাছাইয়ের সময় সব hotkey সাময়িক ছেড়ে দেয়, যাতে Ctrl+Alt+V চাপলে panel না খোলে।
+    /// Temporarily releases all hotkeys while picking a hotkey, so pressing Ctrl+Alt+V doesn't open the panel.
     /// </summary>
     public void Suspend()
     {
@@ -201,10 +201,10 @@ public sealed class HotKeyBindings : IDisposable
     {
         public Action Callback { get; } = callback;
 
-        /// <summary>HotKeyManager এর id; register না থাকলে 0।</summary>
+        /// <summary>HotKeyManager id; 0 if not registered.</summary>
         public int Id { get; set; }
 
-        /// <summary>শেষবার register করা গিয়েছিল কিনা (Suspend এর সময় অবস্থা দেখানোর জন্য)।</summary>
+        /// <summary>Whether it could be registered last time (to show the state while suspended).</summary>
         public bool Works { get; set; }
     }
 }

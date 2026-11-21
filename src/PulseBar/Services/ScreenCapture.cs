@@ -10,21 +10,21 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Screenshot নেওয়া: Windows এর নিজের screen clip ("ms-screenclip:") খোলে; ফল clipboard এ আসে
-/// আর ClipboardManager এর listener সেটা নিজেই ধরে। Snipping Tool না থাকলে fallback হিসেবে
-/// mouse যে monitor এ আছে তার পুরো screen নেয়।
+/// Taking screenshots: opens Windows' own screen clip ("ms-screenclip:"); the result lands on the clipboard
+/// and ClipboardManager's listener picks it up. Without Snipping Tool, as a fallback it captures
+/// the whole screen of the monitor the mouse is on.
 /// </summary>
 public static class ScreenCapture
 {
     /// <summary>
-    /// Windows এর screen clip খোলে। চালু না হলে (Snipping Tool uninstall করা) false; কোনো dialog
-    /// দেখায় না।
+    /// Opens Windows' screen clip. False if it doesn't start (Snipping Tool uninstalled); never shows
+    /// a dialog.
     /// </summary>
     public static bool TryLaunchScreenClip()
     {
         try
         {
-            // ErrorDialog = false: protocol না থাকলে "app খুঁজুন" dialog না দেখিয়ে exception
+            // ErrorDialog = false: without the protocol, throw instead of showing a "look for an app" dialog
             using var process = Process.Start(new ProcessStartInfo("ms-screenclip:")
             {
                 UseShellExecute = true,
@@ -41,8 +41,8 @@ public static class ScreenCapture
     }
 
     /// <summary>
-    /// Mouse যে monitor এ আছে তার পুরো screen এর PNG। যেকোনো thread থেকে ডাকা যায়; সব GDI
-    /// object ছেড়ে দেয়। না পারলে null।
+    /// PNG of the whole screen of the monitor the mouse is on. Can be called from any thread; releases every GDI
+    /// object. null on failure.
     /// </summary>
     public static byte[]? CaptureCursorMonitorPng()
     {
@@ -94,7 +94,7 @@ public static class ScreenCapture
                 return null;
             }
 
-            // Bitmap টা DC থেকে বের করার পরে পড়া হয়
+            // The bitmap is read after it is selected out of the DC
             SelectObject(memoryDc, previous);
             previous = IntPtr.Zero;
 

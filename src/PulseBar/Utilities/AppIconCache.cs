@@ -7,17 +7,17 @@ using System.Windows.Media.Imaging;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Exe/dll থেকে app এর icon, একবার পড়ে cache করা। HICON থেকে ছবি কপি করে সাথে সাথে
-/// DestroyIcon, তাই কোনো GDI handle ধরে রাখা হয় না। UI thread থেকে ডাকতে হবে।
+/// App icons from exe/dll, read once and cached. The image is copied out of the HICON and
+/// DestroyIcon is called right away, so no GDI handle is held. Must be called from the UI thread.
 /// </summary>
 public static class AppIconCache
 {
-    /// <summary>Row এ ২৪ DIP; ২০০% DPI পর্যন্ত ঝাপসা না হওয়ার জন্য ৪৮px।</summary>
+    /// <summary>24 DIP in a row; 48px so it stays sharp up to 200% DPI.</summary>
     private const int IconSize = 48;
 
     private static readonly Dictionary<string, ImageSource?> Cache = new(StringComparer.OrdinalIgnoreCase);
 
-    /// <summary><paramref name="index"/> ঋণাত্মক হলে resource ID। না পেলে null।</summary>
+    /// <summary>A negative <paramref name="index"/> means a resource ID. null if not found.</summary>
     public static ImageSource? Get(string? path, int index)
     {
         if (string.IsNullOrEmpty(path))
@@ -49,7 +49,7 @@ public static class AppIconCache
 
             var source = Imaging.CreateBitmapSourceFromHIcon(icon, Int32Rect.Empty, BitmapSizeOptions.FromEmptyOptions());
 
-            // HICON এর সাথে কোনো যোগ না রেখে নিজস্ব pixel এর কপি
+            // Our own copy of the pixels, with no link to the HICON
             var copy = new WriteableBitmap(source);
             copy.Freeze();
             return copy;

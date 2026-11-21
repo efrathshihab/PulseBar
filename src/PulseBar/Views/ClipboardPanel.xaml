@@ -1,6 +1,6 @@
 <!--
-    Hotkey (default Ctrl+Alt+V) এর ছোট clipboard panel: mouse cursor এর কাছে খোলে।
-    ভেতরে popup এর Clipboard tab এর একই ClipboardList, একই ViewModel।
+    The small clipboard panel for the hotkey (default Ctrl+Alt+V): opens near the mouse cursor.
+    Inside is the same ClipboardList as the popup's Clipboard tab, with the same ViewModel.
 -->
 <ui:FluentWindow x:Class="PulseBar.Views.ClipboardPanel"
                  xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -35,7 +35,7 @@
                        TextTrimming="CharacterEllipsis"
                        Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
 
-            <!-- আগের window admin হিসেবে চললে Windows Ctrl+V পাঠাতে দেয় না: তখন শুধু copy -->
+            <!-- When the previous window runs as admin, Windows doesn't allow sending Ctrl+V: copy only then -->
             <Border x:Name="StatusBadge"
                     HorizontalAlignment="Left"
                     VerticalAlignment="Center"
@@ -43,7 +43,7 @@
                     CornerRadius="8"
                     Visibility="Collapsed"
                     Background="{DynamicResource AccentFillColorDefaultBrush}">
-                <TextBlock Text="Copied — Ctrl+V চাপুন"
+                <TextBlock Text="Copied — press Ctrl+V to paste"
                            FontSize="11"
                            Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
             </Border>

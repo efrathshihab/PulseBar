@@ -16,7 +16,7 @@ public enum StartupApplyOutcome
 {
     Ok,
 
-    /// <summary>User UAC তে "No" দিয়েছে।</summary>
+    /// <summary>The user answered "No" to UAC.</summary>
     Cancelled,
 
     Failed,
@@ -28,14 +28,14 @@ public sealed record StartupApplyResult(StartupApplyOutcome Outcome, string? Mes
 }
 
 /// <summary>
-/// Login এ PulseBar চালু করা। Normal: HKCU এর Run key। WithAdmin: Task Scheduler এর "PulseBar"
-/// task (logon trigger, highest privileges)। দুটো কখনো একসাথে থাকে না।
+/// Starts PulseBar at login. Normal: the HKCU Run key. WithAdmin: the "PulseBar" Task Scheduler
+/// task (logon trigger, highest privileges). The two never exist at the same time.
 /// </summary>
 /// <remarks>
-/// Highest privileges এর task বানাতে/মুছতে admin লাগে। PulseBar admin হিসেবে না চললে নিজেকেই
-/// <see cref="RegisterTaskArg"/> বা <see cref="UnregisterTaskArg"/> দিয়ে "runas" করে চালায়; শুধু
-/// তখন UAC আসে, আর ওই helper process task বানিয়ে/মুছে বন্ধ হয়ে যায় (<see cref="RunHelper"/>)।
-/// Task পড়া হয় Task Scheduler এর COM দিয়ে, লেখা/মোছা schtasks.exe দিয়ে।
+/// Creating/deleting a highest-privileges task needs admin. When PulseBar isn't running as admin it starts
+/// itself with <see cref="RegisterTaskArg"/> or <see cref="UnregisterTaskArg"/> via "runas"; only then
+/// does UAC appear, and that helper process creates/deletes the task and exits (<see cref="RunHelper"/>).
+/// The task is read through Task Scheduler COM and written/deleted with schtasks.exe.
 /// </remarks>
 public sealed class StartupManager
 {
@@ -60,7 +60,7 @@ public sealed class StartupManager
 
     public string ExePath { get; }
 
-    /// <summary>Run key এ যা লেখা হয়: quotes সহ exe এর path আর <see cref="StartupArg"/>।</summary>
+    /// <summary>What goes into the Run key: the quoted exe path and <see cref="StartupArg"/>.</summary>
     public string RunCommand => $"\"{ExePath}\" {StartupArg}";
 
     public static bool IsElevated
@@ -79,10 +79,10 @@ public sealed class StartupManager
         }
     }
 
-    // ---------------- বাইরে থেকে ----------------
+    // ---------------- Public ----------------
 
     /// <summary>
-    /// Settings এ মান না থাকলে (প্রথমবার, বা file নষ্ট ছিল): এখন আসলে কী আছে। কিছু পড়া না গেলে Off।
+    /// When Settings has no value (first run, or the file was corrupt): what actually exists now. Off if nothing can be read.
     /// </summary>
     public LaunchAtLogin Detect()
     {
@@ -95,8 +95,8 @@ public sealed class StartupManager
     }
 
     /// <summary>
-    /// <paramref name="mode"/> চালু করে আর অন্যটা মুছে দেয়। দরকার হলে UAC চায়।
-    /// Background thread এ চালানো যায়; UI আটকায় না।
+    /// Turns on <paramref name="mode"/> and removes the other one. Asks for UAC when needed.
+    /// Can run on a background thread; doesn't block the UI.
     /// </summary>
     public async Task<StartupApplyResult> ApplyAsync(LaunchAtLogin mode)
     {
@@ -106,7 +106,7 @@ public sealed class StartupManager
             {
                 case LaunchAtLogin.Normal:
                 {
-                    // আগে task মোছা; না পারলে Run key ও লেখা হবে না, যাতে দুটো একসাথে না থাকে
+                    // Delete the task first; if that fails the Run key isn't written either, so both never exist together
                     var removed = await RemoveTaskAsync();
                     if (removed.Outcome != StartupApplyOutcome.Ok)
                     {
@@ -139,13 +139,13 @@ public sealed class StartupManager
         catch (Exception ex)
         {
             Log.Error($"Launch at login: {mode}", ex);
-            return new StartupApplyResult(StartupApplyOutcome.Failed, "Windows এ বদলানো যায়নি");
+            return new StartupApplyResult(StartupApplyOutcome.Failed, "Couldn't change the Windows setting");
         }
     }
 
     /// <summary>
-    /// App শুরুর সময়: Run key বা task এর path এখনকার exe এর সাথে না মিললে ঠিক করে। UAC কখনো চায় না;
-    /// admin ছাড়া task ঠিক করা না গেলে কারণটা ফেরত দেয় (Settings এ দেখানোর জন্য)।
+    /// At app startup: fixes the Run key or task if its path doesn't match the current exe. Never asks for UAC;
+    /// if the task can't be fixed without admin, returns the reason (to show in Settings).
     /// </summary>
     public string? Verify(LaunchAtLogin mode)
     {
@@ -167,7 +167,7 @@ public sealed class StartupManager
                     var state = QueryTask(out var action);
                     if (state == TaskQuery.Unknown || state == TaskQuery.Present && IsOurTaskAction(action))
                     {
-                        // পড়া না গেলে কিছু বলা যায় না
+                        // Can't tell anything if it can't be read
                         DeleteRunValueIfOurs();
                         return null;
                     }
@@ -183,8 +183,8 @@ public sealed class StartupManager
                     }
 
                     return state == TaskQuery.Missing
-                        ? "Login task পাওয়া যায়নি"
-                        : "Login task পুরনো exe চালায়";
+                        ? "Login task not found"
+                        : "Login task runs an old exe";
                 }
 
                 default:
@@ -226,7 +226,7 @@ public sealed class StartupManager
         }
     }
 
-    /// <summary>"PulseBar" নামের value টা কোনো PulseBar.exe চালায় কিনা (অন্য path এরটাও)।</summary>
+    /// <summary>Whether the "PulseBar" value runs some PulseBar.exe (including one at another path).</summary>
     private static bool IsOurRunValue(string value) =>
         value.Contains("PulseBar.exe", StringComparison.OrdinalIgnoreCase);
 
@@ -237,7 +237,7 @@ public sealed class StartupManager
         Missing,
         Present,
 
-        /// <summary>পড়া গেল না (অনুমতি নেই বা Task Scheduler চলছে না)।</summary>
+        /// <summary>Couldn't read it (no permission or Task Scheduler isn't running).</summary>
         Unknown,
     }
 
@@ -258,7 +258,7 @@ public sealed class StartupManager
         }
     }
 
-    /// <summary>Task Scheduler এর COM দিয়ে শুধু পড়া; কিছু বদলায় না।</summary>
+    /// <summary>Read-only through Task Scheduler COM; changes nothing.</summary>
     private static TaskQuery QueryTask(out (string Command, string Arguments)? action)
     {
         action = null;
@@ -331,7 +331,7 @@ public sealed class StartupManager
         }
     }
 
-    /// <summary>Task XML এর প্রথম Exec action।</summary>
+    /// <summary>The first Exec action of the task XML.</summary>
     public static (string Command, string Arguments)? ParseTaskAction(string xml)
     {
         try
@@ -351,8 +351,8 @@ public sealed class StartupManager
     }
 
     /// <summary>
-    /// Task এর XML: শুধু এই user এর logon এ, highest privileges, কোনো time limit নেই, battery তেও
-    /// চলবে আর battery তে গেলে থামবে না।
+    /// The task XML: only at this user's logon, highest privileges, no time limit, runs on battery
+    /// and doesn't stop when switching to battery.
     /// </summary>
     public static string BuildTaskXml(string exePath, string userSid)
     {
@@ -392,7 +392,7 @@ public sealed class StartupManager
                     E("RunOnlyIfIdle", "false"),
                     E("WakeToRun", "false"),
                     E("ExecutionTimeLimit", "PT0S"),
-                    // Default 7 মানে below normal; 4 মানে normal priority
+                    // Default 7 means below normal; 4 means normal priority
                     E("Priority", "4")),
                 E("Actions",
                     new XAttribute("Context", "Author"),
@@ -417,10 +417,10 @@ public sealed class StartupManager
         {
             return RunSchtasks(CreateArgs(WriteTaskXmlFile(sid))).ExitCode == 0
                 ? StartupApplyResult.Ok
-                : new StartupApplyResult(StartupApplyOutcome.Failed, "Login task বানানো যায়নি");
+                : new StartupApplyResult(StartupApplyOutcome.Failed, "Couldn't create the login task");
         }
 
-        return await RunElevatedHelperAsync($"{RegisterTaskArg} {sid}", "Login task বানানো যায়নি");
+        return await RunElevatedHelperAsync($"{RegisterTaskArg} {sid}", "Couldn't create the login task");
     }
 
     private async Task<StartupApplyResult> RemoveTaskAsync()
@@ -431,7 +431,7 @@ public sealed class StartupManager
             return StartupApplyResult.Ok;
         }
 
-        // আগে admin ছাড়াই চেষ্টা; highest privileges এর task হলে সাধারণত admin লাগে
+        // Try without admin first; a highest-privileges task usually needs admin
         if (RunSchtasks(DeleteArgs()).ExitCode == 0)
         {
             return StartupApplyResult.Ok;
@@ -439,13 +439,13 @@ public sealed class StartupManager
 
         if (IsElevated)
         {
-            return new StartupApplyResult(StartupApplyOutcome.Failed, "Login task মোছা যায়নি");
+            return new StartupApplyResult(StartupApplyOutcome.Failed, "Couldn't delete the login task");
         }
 
-        return await RunElevatedHelperAsync(UnregisterTaskArg, "Login task মোছা যায়নি");
+        return await RunElevatedHelperAsync(UnregisterTaskArg, "Couldn't delete the login task");
     }
 
-    /// <summary>নিজেকে "runas" করে helper হিসেবে চালায় আর শেষ হওয়া পর্যন্ত অপেক্ষা করে।</summary>
+    /// <summary>Starts itself as the helper via "runas" and waits for it to finish.</summary>
     private async Task<StartupApplyResult> RunElevatedHelperAsync(string arguments, string failMessage)
     {
         Process? process;
@@ -461,7 +461,7 @@ public sealed class StartupManager
         catch (Win32Exception ex) when (ex.NativeErrorCode == ErrorCancelled)
         {
             Log.Info("Launch at login: UAC was declined");
-            return new StartupApplyResult(StartupApplyOutcome.Cancelled, "Admin অনুমতি দেওয়া হয়নি, আগের মানে ফেরানো হলো");
+            return new StartupApplyResult(StartupApplyOutcome.Cancelled, "Admin permission was denied, reverted to the previous option");
         }
 
         if (process is null)
@@ -494,13 +494,13 @@ public sealed class StartupManager
 
     // ---------------- Helper process (admin) ----------------
 
-    /// <summary>App এর argument helper এর কিনা।</summary>
+    /// <summary>Whether the app's arguments are the helper's.</summary>
     public static bool IsHelperInvocation(string[] args) =>
         args.Length > 0 && (args[0] == RegisterTaskArg || args[0] == UnregisterTaskArg);
 
     /// <summary>
-    /// Admin হিসেবে চলা helper: task বানায় বা মোছে, তারপর exit code দেয় (0 = সফল)। কোনো window নেই।
-    /// Exe এর path argument থেকে নেওয়া হয় না, সবসময় নিজের path।
+    /// The helper running as admin: creates or deletes the task, then returns an exit code (0 = success). No window.
+    /// The exe path is never taken from the arguments, always its own path.
     /// </summary>
     public static int RunHelper(string[] args)
     {
@@ -513,7 +513,7 @@ public sealed class StartupManager
 
             if (args[0] == RegisterTaskArg)
             {
-                // Task শুধু যে user চেয়েছে তার logon এ; SID ঠিক না হলে নিজের
+                // The task is only for the logon of the user who asked; our own SID if none was given
                 string sid = CurrentUserSid();
                 if (args.Length > 1)
                 {
@@ -552,7 +552,7 @@ public sealed class StartupManager
     {
         string path = Path.Combine(Path.GetTempPath(), $"PulseBar-task-{Guid.NewGuid():N}.xml");
 
-        // schtasks UTF-16 (BOM সহ) XML ভালো বোঝে
+        // schtasks understands UTF-16 (with BOM) XML best
         File.WriteAllText(path, BuildTaskXml(ExePath, sid), Encoding.Unicode);
         return path;
     }
@@ -594,7 +594,7 @@ public sealed class StartupManager
                 }
                 catch
                 {
-                    // আগেই বন্ধ হয়ে গেছে
+                    // Already exited
                 }
 
                 Log.Error($"schtasks {args[0]} timed out");
@@ -623,7 +623,7 @@ public sealed class StartupManager
                 }
                 catch
                 {
-                    // Temp folder, পরে Windows নিজেই পরিষ্কার করবে
+                    // Temp folder, Windows cleans it up later
                 }
             }
         }

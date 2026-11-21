@@ -7,8 +7,8 @@ using PulseBar.Services;
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// Sound tab এর master volume। Per-app row এর মতোই: slider টানার সময় ~৩০ ms এ একবার সর্বশেষ মান
-/// পাঠায়, আর user নিজে বদলানোর ঠিক পরে বাইরের (পুরনো) মান বসায় না।
+/// Master volume on the Sound tab. Like the per-app rows: while dragging the slider it sends the latest value
+/// about once every ~30 ms, and right after the user changes it, it doesn't apply an outside (stale) value.
 /// </summary>
 public sealed partial class MasterVolumeViewModel : ObservableObject
 {
@@ -39,10 +39,10 @@ public sealed partial class MasterVolumeViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsMuted { get; set; }
 
-    /// <summary>যেমন "65%"।</summary>
+    /// <summary>e.g. "65%".</summary>
     public string VolumeText => $"{Math.Round(Volume):0}%";
 
-    /// <summary>Controller এর মান বসায়; user এখন টানছে থাকলে বাদ।</summary>
+    /// <summary>Applies the controller's value; skipped while the user is dragging.</summary>
     public void Apply(MasterVolumeState master, bool force = false)
     {
         if (!force && (_pushTimer.IsEnabled || Environment.TickCount64 - _lastUserChange < UserHoldMs))
@@ -63,7 +63,7 @@ public sealed partial class MasterVolumeViewModel : ObservableObject
         }
     }
 
-    /// <summary>Popup লুকানোর সময় বাকি থাকা মান পাঠিয়ে দেয়।</summary>
+    /// <summary>Sends any pending value when the popup hides.</summary>
     public void Flush()
     {
         if (_pushTimer.IsEnabled)

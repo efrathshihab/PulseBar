@@ -7,8 +7,8 @@ using System.Runtime.InteropServices;
 namespace PulseBar.Utilities;
 
 /// <summary>
-/// Tray এর জন্য গোল ব্যাকগ্রাউন্ডে ছোট লেখা (যেমন "23") দিয়ে icon আঁকে।
-/// প্রতিটা icon এর HICON নিজে <see cref="Destroy"/> করতে হয়, নাহলে GDI handle জমে যায়।
+/// Draws tray icons with small text (e.g. "23") on a round background.
+/// Each icon's HICON must be released with <see cref="Destroy"/>, otherwise GDI handles pile up.
 /// </summary>
 internal static class TrayIconRenderer
 {
@@ -30,7 +30,7 @@ internal static class TrayIconRenderer
                 g.FillEllipse(fill, 0, 0, size - 1, size - 1);
             }
 
-            // দুই অঙ্ক হলে একটু ছোট font, যাতে গোলের ভেতরে আঁটে
+            // Slightly smaller font for two digits, so it fits inside the circle
             float fontPx = size * (text.Length >= 2 ? 0.74f : 0.86f);
             using var font = new Font("Segoe UI", fontPx, FontStyle.Bold, GraphicsUnit.Pixel);
             using var brush = new SolidBrush(foreground);
@@ -41,14 +41,14 @@ internal static class TrayIconRenderer
                 FormatFlags = StringFormatFlags.NoWrap | StringFormatFlags.NoClip,
             };
 
-            // GDI+ লেখা সামান্য নিচে বসায়, তাই একটু উপরে তোলা
+            // GDI+ places text slightly low, so it's nudged up
             g.DrawString(text, font, brush, new RectangleF(-size * 0.1f, -size * 0.04f, size * 1.2f, size), format);
         }
 
         return Icon.FromHandle(bitmap.GetHicon());
     }
 
-    /// <summary>Icon.FromHandle এর icon Dispose করলে handle ছাড়ে না, তাই নিজে DestroyIcon।</summary>
+    /// <summary>Disposing an Icon.FromHandle icon doesn't release the handle, so DestroyIcon is called directly.</summary>
     public static void Destroy(Icon? icon)
     {
         if (icon is null)

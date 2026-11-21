@@ -20,7 +20,7 @@
             <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
         </Style>
 
-        <!-- Device list এর একটা row: ধরন এর icon, নাম, default হলে ✓ -->
+        <!-- One row of the device list: type icon, name, ✓ when default -->
         <DataTemplate x:Key="DeviceRowTemplate" DataType="{x:Type models:AudioOutputDevice}">
             <ui:Button HorizontalAlignment="Stretch"
                        HorizontalContentAlignment="Stretch"
@@ -59,7 +59,7 @@
             </ui:Button>
         </DataTemplate>
 
-        <!-- প্রতিটা app এর row; সব রং theme থেকে -->
+        <!-- One row per app; all colors come from the theme -->
         <DataTemplate x:Key="AppRowTemplate" DataType="{x:Type vm:AudioAppViewModel}">
             <Border Margin="0,0,0,6"
                     Padding="10,8,4,6"
@@ -79,7 +79,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
-                    <!-- App এর icon; না পেলে সাধারণ app icon -->
+                    <!-- The app's icon; a generic app icon if not found -->
                     <Grid Grid.RowSpan="2"
                           Width="24"
                           Height="24"
@@ -162,7 +162,7 @@
         </Grid.RowDefinitions>
 
         <StackPanel>
-            <!-- Output: বর্তমান device; click করলে নিচে সব device এর list -->
+            <!-- Output: the current device; clicking shows the list of all devices below -->
             <TextBlock Text="Output" Style="{StaticResource SectionHeader}" />
             <ui:Button x:Name="OutputButton"
                        HorizontalAlignment="Stretch"
@@ -189,9 +189,9 @@
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"
                                Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                    <!-- কোনো device নেই -->
+                    <!-- No device -->
                     <TextBlock Grid.Column="1"
-                               Text="কোনো output device পাওয়া যায়নি"
+                               Text="No output device found"
                                FontSize="13"
                                VerticalAlignment="Center"
                                TextTrimming="CharacterEllipsis"
@@ -245,7 +245,7 @@
                 </ScrollViewer>
             </Border>
 
-            <!-- IPolicyConfig কাজ না করলে, কয়েক সেকেন্ড -->
+            <!-- When IPolicyConfig fails, for a few seconds -->
             <StackPanel Orientation="Horizontal"
                         Margin="2,6,0,0"
                         Visibility="{Binding IsSwitchErrorVisible, Converter={StaticResource BoolToVisibility}}">
@@ -254,7 +254,7 @@
                                Margin="0,0,6,0"
                                VerticalAlignment="Center"
                                Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
-                <TextBlock Text="Device বদলানো যায়নি"
+                <TextBlock Text="Couldn't switch device"
                            FontSize="12"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource SystemFillColorCriticalBrush}" />
@@ -346,7 +346,7 @@
                 </Grid>
             </StackPanel>
 
-            <!-- পাতলা divider, তারপর Apps -->
+            <!-- Thin divider, then Apps -->
             <StackPanel Visibility="{Binding HasDevices, Converter={StaticResource BoolToVisibility}}">
                 <Border Height="1"
                         Margin="0,12,0,12"
@@ -364,7 +364,7 @@
                               ItemTemplate="{StaticResource AppRowTemplate}"
                               Focusable="False" />
 
-                <!-- System sounds ছাড়া কোনো app নেই -->
+                <!-- No apps other than System sounds -->
                 <StackPanel Margin="0,32,0,0"
                             HorizontalAlignment="Center"
                             Visibility="{Binding IsEmptyVisible, Converter={StaticResource BoolToVisibility}}">
@@ -372,7 +372,7 @@
                                    FontSize="40"
                                    HorizontalAlignment="Center"
                                    Foreground="{DynamicResource TextFillColorTertiaryBrush}" />
-                    <TextBlock Text="এখন কোনো app শব্দ করছে না"
+                    <TextBlock Text="No apps are playing audio"
                                Margin="0,8,0,0"
                                HorizontalAlignment="Center"
                                FontSize="13"

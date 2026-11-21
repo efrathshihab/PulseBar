@@ -11,20 +11,20 @@ using PulseBar.Utilities;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Output device এর list আর default device বদলানো, default device এর master volume, আর তার
-/// audio session গুলো (Volume Mixer এর মতো) exe অনুযায়ী জোড়া দিয়ে per-app volume/mute।
+/// Lists output devices and switches the default device, the default device's master volume, and its
+/// audio sessions (like the Volume Mixer) grouped by exe for per-app volume/mute.
 /// </summary>
 /// <remarks>
-/// সব COM কাজ একটাই নিজস্ব MTA thread এ, ক্রমানুসারে। COM এর event (নতুন session, volume বদল,
-/// device বদল) যেকোনো thread এ আসে; সেগুলো শুধু এই thread এর queue তে কাজ পাঠায়।
-/// UI এর জন্য immutable snapshot (<see cref="GetApps"/>, <see cref="GetDevices"/>, <see cref="GetMaster"/>)
-/// আর তাদের Changed event।
+/// All COM work runs in order on one dedicated MTA thread. COM events (new session, volume change,
+/// device change) arrive on any thread; they only queue work onto this thread.
+/// The UI gets immutable snapshots (<see cref="GetApps"/>, <see cref="GetDevices"/>, <see cref="GetMaster"/>)
+/// and their Changed events.
 /// </remarks>
 public sealed class AudioController : IDisposable
 {
     private const string SystemSoundsName = "System sounds";
 
-    // নিজের লেখা volume এর echo চেনার জন্য (float এর rounding)
+    // To recognize the echo of our own volume writes (float rounding)
     private const float EchoTolerance = 0.001f;
 
     private readonly ConcurrentQueue<Action> _work = new();
@@ -38,7 +38,7 @@ public sealed class AudioController : IDisposable
     private int _resyncQueued;
     private int _devicesQueued;
 
-    // নিচের সব শুধু audio thread থেকে ছোঁয়া হয়
+    // Everything below is touched only from the audio thread
     private readonly Dictionary<string, SessionEntry> _sessions = [];
     private readonly Dictionary<int, Process?> _processWatchers = [];
     private readonly Dictionary<string, string> _appNames = new(StringComparer.OrdinalIgnoreCase);
@@ -55,24 +55,24 @@ public sealed class AudioController : IDisposable
     private bool _masterEchoMuted;
 
     /// <summary>
-    /// App এর list বা কারও volume/mute বাইরে থেকে (যেমন Windows এর Volume Mixer) বদলালে, audio thread
-    /// থেকে। PulseBar নিজে যে volume/mute লিখেছে তার ফিরতি event এ এটা আসে না।
+    /// Raised from the audio thread when the app list or someone's volume/mute changes from outside (such as the
+    /// Windows Volume Mixer). Not raised for the echo of volume/mute that PulseBar itself wrote.
     /// </summary>
     public event EventHandler? AppsChanged;
 
-    /// <summary>Device যোগ/সরানো, state বা default বদলালে, audio thread থেকে।</summary>
+    /// <summary>Raised from the audio thread when a device is added/removed or its state or the default changes.</summary>
     public event EventHandler? DevicesChanged;
 
     /// <summary>
-    /// Master volume/mute বাইরে থেকে (volume key, Windows এর flyout) বদলালে বা default device বদলালে,
-    /// audio thread থেকে। PulseBar নিজে যা লিখেছে তার ফিরতি notification এ আসে না।
+    /// Raised from the audio thread when master volume/mute changes from outside (volume keys, the Windows flyout)
+    /// or the default device changes. Not raised for the echo of what PulseBar itself wrote.
     /// </summary>
     public event EventHandler? MasterChanged;
 
-    /// <summary>Default device বদলানো যায়নি (IPolicyConfig কাজ করেনি), audio thread থেকে।</summary>
+    /// <summary>Raised from the audio thread when the default device couldn't be changed (IPolicyConfig failed).</summary>
     public event EventHandler? DeviceSwitchFailed;
 
-    /// <summary>এই মুহূর্তের app গুলো: আগে System sounds, তারপর নাম অনুযায়ী।</summary>
+    /// <summary>The current apps: System sounds first, then by name.</summary>
     public IReadOnlyList<AudioAppSession> GetApps()
     {
         lock (_gate)
@@ -81,7 +81,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>Active output device গুলো, নাম অনুযায়ী।</summary>
+    /// <summary>Active output devices, by name.</summary>
     public IReadOnlyList<AudioOutputDevice> GetDevices()
     {
         lock (_gate)
@@ -90,7 +90,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>Default device এর master volume; কোনো device না থাকলে বা পড়া না গেলে null।</summary>
+    /// <summary>Master volume of the default device; null if there is no device or it can't be read.</summary>
     public MasterVolumeState? GetMaster()
     {
         lock (_gate)
@@ -117,7 +117,7 @@ public sealed class AudioController : IDisposable
         Enqueue(Initialize);
     }
 
-    /// <summary>App এর সব session এ volume (0.0–1.0) বসায়।</summary>
+    /// <summary>Sets the volume (0.0–1.0) on all of the app's sessions.</summary>
     public void SetVolume(string appKey, float volume)
     {
         volume = Math.Clamp(volume, 0f, 1f);
@@ -129,7 +129,7 @@ public sealed class AudioController : IDisposable
         }));
     }
 
-    /// <summary>App এর সব session mute বা unmute করে।</summary>
+    /// <summary>Mutes or unmutes all of the app's sessions.</summary>
     public void SetMute(string appKey, bool mute) =>
         Enqueue(() => ForEachSession(appKey, entry =>
         {
@@ -139,8 +139,8 @@ public sealed class AudioController : IDisposable
         }));
 
     /// <summary>
-    /// Device টাকে Console, Multimedia আর Communications তিন role এরই default বানায়। সফল হলে
-    /// Windows এর DefaultDeviceChanged থেকে সব নতুন করে বানানো হয়; না হলে <see cref="DeviceSwitchFailed"/>।
+    /// Makes the device the default for all three roles: Console, Multimedia and Communications. On success
+    /// everything is rebuilt from Windows' DefaultDeviceChanged; otherwise <see cref="DeviceSwitchFailed"/>.
     /// </summary>
     public void SetDefaultDevice(string deviceId) =>
         Enqueue(() =>
@@ -155,7 +155,7 @@ public sealed class AudioController : IDisposable
             DeviceSwitchFailed?.Invoke(this, EventArgs.Empty);
         });
 
-    /// <summary>Default device এর master volume (0.0–1.0)।</summary>
+    /// <summary>Master volume of the default device (0.0–1.0).</summary>
     public void SetMasterVolume(float volume)
     {
         volume = Math.Clamp(volume, 0f, 1f);
@@ -194,7 +194,7 @@ public sealed class AudioController : IDisposable
             return;
         }
 
-        // Thread এর queue তে শেষ কাজ: সব COM object ছেড়ে দেওয়া; তারপর thread নিজেই শেষ হয়
+        // Last job on the thread's queue: release all COM objects; then the thread ends by itself
         _work.Enqueue(ReleaseAll);
         _disposed = true;
         _signal.Set();
@@ -243,7 +243,7 @@ public sealed class AudioController : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    // কোনো COM error এ thread থামবে না
+                    // A COM error never stops the thread
                     Log.Error("Audio work", ex);
                 }
             }
@@ -270,14 +270,14 @@ public sealed class AudioController : IDisposable
                 }
             };
 
-            // যেমন Bluetooth headphone connect/disconnect; capture device এরটাও আসে, তাতে শুধু একবার বাড়তি পড়া
+            // e.g. Bluetooth headphones connecting/disconnecting; capture devices also report, costing just one extra read
             _deviceNotifications.DeviceAdded += (_, _) => QueueDeviceRefresh();
             _deviceNotifications.DeviceRemoved += (_, _) => QueueDeviceRefresh();
             _deviceNotifications.DeviceStateChanged += (_, _) => QueueDeviceRefresh();
         }
         catch (Exception ex)
         {
-            // Audio service বন্ধ ইত্যাদি: Sound tab খালি থাকবে, app চলবে
+            // Audio service stopped and so on: the Sound tab stays empty, the app keeps running
             Log.Error("Audio: device enumerator unavailable", ex);
             return;
         }
@@ -286,8 +286,8 @@ public sealed class AudioController : IDisposable
     }
 
     /// <summary>
-    /// পুরনো device এর সব কিছু (session, master notification) ছেড়ে দিয়ে বর্তমান default device থেকে
-    /// app list, master volume আর device list নতুন করে বানায়।
+    /// Releases everything from the old device (sessions, master notification) and rebuilds the app list,
+    /// master volume and device list from the current default device.
     /// </summary>
     private void Rebuild()
     {
@@ -328,7 +328,7 @@ public sealed class AudioController : IDisposable
     }
 
     /// <summary>
-    /// একই device আবার default বসালেও Windows এটা পাঠায়; তখন সব ছেড়ে আবার বানানোর দরকার নেই।
+    /// Windows sends this even when the same device is set as default again; then there's no need to rebuild.
     /// </summary>
     private void OnDefaultDeviceChanged(string? deviceId)
     {
@@ -339,7 +339,7 @@ public sealed class AudioController : IDisposable
         }
         catch
         {
-            // পুরনো device নষ্ট: নতুন করে বানাতেই হবে
+            // Old device is broken: must rebuild
         }
 
         if (deviceId is not null && deviceId == currentId)
@@ -357,10 +357,10 @@ public sealed class AudioController : IDisposable
         RefreshDevices();
     }
 
-    /// <summary>Master volume পড়ে আর তার notification এ লাগে। না পারলে master null, app list তবুও চলে।</summary>
+    /// <summary>Reads master volume and subscribes to its notifications. On failure master is null, but the app list still works.</summary>
     private void AttachMaster(MMDevice device)
     {
-        // পুরনো device এর দেরিতে আসা notification চেনার জন্য
+        // To recognize late notifications from the old device
         int generation = ++_deviceGeneration;
         _masterEchoVolume = null;
 
@@ -370,7 +370,7 @@ public sealed class AudioController : IDisposable
             _masterVolume = endpoint.MasterVolumeLevelScalar;
             _masterMuted = endpoint.Mute;
 
-            // COM thread থেকে আসে; data টা সেখানেই পড়ে শুধু queue তে পাঠানো
+            // Comes from a COM thread; read the data there and only queue it
             _masterHandler = data =>
             {
                 float volume = data.MasterVolume;
@@ -405,7 +405,7 @@ public sealed class AudioController : IDisposable
         PublishMaster(raise: !echo);
     }
 
-    /// <summary>এখনই এই মান লেখা হচ্ছে; এর ফিরতি notification কে বাইরের পরিবর্তন ধরা হবে না।</summary>
+    /// <summary>This value is being written now; its echo notification won't count as an outside change.</summary>
     private void ExpectMasterEcho(float volume, bool muted)
     {
         _masterEchoVolume = volume;
@@ -426,7 +426,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>COM thread থেকে; অনেকগুলো একসাথে এলেও একবারই পড়া হয়।</summary>
+    /// <summary>From a COM thread; many arriving together are read only once.</summary>
     private void QueueDeviceRefresh()
     {
         if (Interlocked.Exchange(ref _devicesQueued, 1) == 0)
@@ -435,7 +435,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>Active output device গুলো নতুন করে পড়ে; কিছু না বদলালে event দেয় না।</summary>
+    /// <summary>Rereads the active output devices; raises no event if nothing changed.</summary>
     private void RefreshDevices()
     {
         Interlocked.Exchange(ref _devicesQueued, 0);
@@ -450,7 +450,7 @@ public sealed class AudioController : IDisposable
             }
             catch
             {
-                // Default device এর মধ্যে সরে গেছে; DefaultDeviceChanged এ আবার আসবে
+                // Moved between default devices; DefaultDeviceChanged will come again
             }
 
             try
@@ -473,7 +473,7 @@ public sealed class AudioController : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        // পড়ার মাঝে সরানো হয়েছে ইত্যাদি
+                        // Removed while being read, and so on
                         Log.Error($"Audio: skipped output device {i}", ex);
                     }
                 }
@@ -527,7 +527,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>COM thread থেকে। এই object টা ধার করা, তাই রাখা হয় না; পুরো list আবার মেলানো হয়।</summary>
+    /// <summary>From a COM thread. This object is borrowed, so it isn't kept; the whole list is reconciled again.</summary>
     private void OnSessionCreated(object sender, AudioSessionControl newSession)
     {
         try
@@ -536,7 +536,7 @@ public sealed class AudioController : IDisposable
         }
         catch
         {
-            // ধার করা wrapper; ছাড়তে না পারলেও ক্ষতি নেই
+            // Borrowed wrapper; no harm if it can't be released
         }
 
         if (Interlocked.Exchange(ref _resyncQueued, 1) == 0)
@@ -546,8 +546,8 @@ public sealed class AudioController : IDisposable
     }
 
     /// <summary>
-    /// Session এর list নতুন করে পড়ে: নতুনগুলো যোগ, আর যেগুলো আর নেই বা expired সেগুলো বাদ।
-    /// কোনো session পড়তে না পারলে (access denied ইত্যাদি) শুধু সেটা বাদ যায়।
+    /// Rereads the session list: adds new ones and drops ones that are gone or expired.
+    /// If a session can't be read (access denied and so on), only that one is skipped.
     /// </summary>
     private void Resync()
     {
@@ -585,7 +585,7 @@ public sealed class AudioController : IDisposable
                     if (CreateEntry(id, control) is { } entry)
                     {
                         _sessions[id] = entry;
-                        control = null; // এখন entry র
+                        control = null; // now owned by the entry
                         WatchProcess(entry.ProcessId);
                     }
                     else
@@ -602,7 +602,7 @@ public sealed class AudioController : IDisposable
                     }
                     catch
                     {
-                        // ইতিমধ্যে নষ্ট
+                        // Already broken
                     }
                 }
             }
@@ -639,7 +639,7 @@ public sealed class AudioController : IDisposable
         }
         else
         {
-            // Process এর exe পড়া না গেলে (access denied, বা ইতিমধ্যে বন্ধ) row বাদ
+            // If the process exe can't be read (access denied, or already exited), skip the row
             if (ExePathOf(pid) is not { } exe)
             {
                 return null;
@@ -670,7 +670,7 @@ public sealed class AudioController : IDisposable
 
         entry.Release();
 
-        // ওই process এর আর কোনো session না থাকলে তার exit দেখাও বন্ধ
+        // Stop watching for the process exit if it has no other sessions
         if (!_sessions.Values.Any(e => e.ProcessId == entry.ProcessId) &&
             _processWatchers.Remove(entry.ProcessId, out var process))
         {
@@ -678,7 +678,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>Process বন্ধ হলে তার সব session সাথে সাথে বাদ (session expired হতে দেরি হয়)।</summary>
+    /// <summary>When a process exits, drop all its sessions right away (session expiry is slow).</summary>
     private void WatchProcess(int pid)
     {
         if (pid == 0 || _processWatchers.ContainsKey(pid))
@@ -695,7 +695,7 @@ public sealed class AudioController : IDisposable
         }
         catch
         {
-            // Admin process ইত্যাদি: exit দেখা যাবে না, session expired হলে তখন বাদ যাবে
+            // Admin processes and the like: exit can't be watched, the session is dropped when it expires
             process?.Dispose();
             process = null;
         }
@@ -732,17 +732,17 @@ public sealed class AudioController : IDisposable
             }
             catch (Exception ex)
             {
-                // Session এর মধ্যে নষ্ট হয়ে গেছে
+                // Broken in the meantime
                 Log.Error($"Audio: could not change '{entry.Name}'", ex);
                 RemoveEntry(entry);
             }
         }
 
-        // নিজের পরিবর্তন: snapshot ঠিক রাখা হয়, কিন্তু event না (UI তে আগেই বসানো আছে)
+        // Our own change: the snapshot is kept correct, but no event (the UI already shows it)
         Publish(raise: false);
     }
 
-    /// <summary>Session এর event, audio thread এ।</summary>
+    /// <summary>Session events, on the audio thread.</summary>
     private void OnSessionVolumeChanged(SessionEntry entry, float volume, bool muted)
     {
         if (!_sessions.ContainsKey(entry.InstanceId))
@@ -765,7 +765,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>Session গুলোকে app অনুযায়ী জোড়া দিয়ে নতুন snapshot।</summary>
+    /// <summary>A new snapshot with sessions grouped by app.</summary>
     private void Publish(bool raise)
     {
         var apps = _sessions.Values
@@ -825,7 +825,7 @@ public sealed class AudioController : IDisposable
             Log.Error("Audio: master notification release", ex);
         }
 
-        // Endpoint volume নিজে device এর Dispose এ ছাড়া হয় (notification registration সহ)
+        // The endpoint volume is released in the device's own Dispose (including the notification registration)
         _endpointVolume = null;
         _masterHandler = null;
 
@@ -833,7 +833,7 @@ public sealed class AudioController : IDisposable
         {
             if (_sessionManager is not null)
             {
-                // Session notification এর registration ও এতে ছাড়া হয়
+                // This also releases the session notification registration
                 _sessionManager.OnSessionCreated -= OnSessionCreated;
                 _sessionManager.Dispose();
             }
@@ -884,14 +884,14 @@ public sealed class AudioController : IDisposable
         }
         catch
         {
-            // Version info নেই: exe এর নাম
+            // No version info: use the exe name
         }
 
         _appNames[exe] = name;
         return name;
     }
 
-    /// <summary>"@%SystemRoot%\System32\AudioSrv.Dll,-203" এর মতো লেখা থেকে file আর index।</summary>
+    /// <summary>File and index from text like "@%SystemRoot%\System32\AudioSrv.Dll,-203".</summary>
     private static (string? Path, int Index) ParseIconPath(string? iconPath)
     {
         if (string.IsNullOrWhiteSpace(iconPath))
@@ -929,7 +929,7 @@ public sealed class AudioController : IDisposable
         }
     }
 
-    /// <summary>একটা audio session, তার COM wrapper আর event callback।</summary>
+    /// <summary>One audio session, its COM wrapper and event callback.</summary>
     private sealed class SessionEntry(
         AudioController owner,
         string instanceId,
@@ -964,7 +964,7 @@ public sealed class AudioController : IDisposable
 
         public bool Muted { get; set; }
 
-        /// <summary>এখনই এই মান লেখা হচ্ছে; এর ফিরতি event কে বাইরের পরিবর্তন ধরা হবে না।</summary>
+        /// <summary>This value is being written now; its echo event won't count as an outside change.</summary>
         public void ExpectEcho(float volume, bool muted)
         {
             _echoVolume = volume;
@@ -982,7 +982,7 @@ public sealed class AudioController : IDisposable
             }
             catch
             {
-                // Session ইতিমধ্যে নষ্ট
+                // Session already broken
             }
 
             try
@@ -991,11 +991,11 @@ public sealed class AudioController : IDisposable
             }
             catch
             {
-                // একই
+                // Same
             }
         }
 
-        // নিচের সব COM thread থেকে আসে; শুধু audio thread এ কাজ পাঠায়
+        // Everything below comes from COM threads; it only queues work onto the audio thread
         public void OnVolumeChanged(float volume, bool isMuted) =>
             owner.Enqueue(() => owner.OnSessionVolumeChanged(this, volume, isMuted));
 

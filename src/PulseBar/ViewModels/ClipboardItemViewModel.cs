@@ -4,8 +4,8 @@ using PulseBar.Models;
 namespace PulseBar.ViewModels;
 
 /// <summary>
-/// Clipboard list এর একটা card। ছবি এখানে রাখা হয় না; thumbnail টা card দেখা গেলেই
-/// <see cref="Utilities.ThumbnailConverter"/> disk থেকে ছোট করে পড়ে।
+/// One card of the clipboard list. The image isn't kept here; once the card is visible
+/// <see cref="Utilities.ThumbnailConverter"/> reads a small version from disk.
 /// </summary>
 public sealed partial class ClipboardItemViewModel : ObservableObject
 {
@@ -24,10 +24,10 @@ public sealed partial class ClipboardItemViewModel : ObservableObject
 
     public bool IsImage => Item.Kind == ClipboardItemKind.Image;
 
-    /// <summary>Card এর কোণায় camera badge।</summary>
+    /// <summary>Camera badge in the card's corner.</summary>
     public bool IsScreenshot => Item.IsScreenshot;
 
-    /// <summary>Text এর preview, অথবা ছবির মাপ যেমন "3840 × 2160"।</summary>
+    /// <summary>Text preview, or the image size such as "3840 × 2160".</summary>
     public string DisplayText { get; }
 
     public string? ThumbnailPath => Item.ThumbnailPath;
@@ -37,15 +37,15 @@ public sealed partial class ClipboardItemViewModel : ObservableObject
     [ObservableProperty]
     public partial string RelativeTime { get; set; }
 
-    /// <summary>Copy করার পর ১ সেকেন্ড "Copied" দেখানোর জন্য।</summary>
+    /// <summary>To show "Copied" for 1 second after copying.</summary>
     [ObservableProperty]
     public partial bool IsCopied { get; set; }
 
-    /// <summary>Copy না হলে ২ সেকেন্ড "Copy failed" দেখানোর জন্য; কারণ log এ থাকে।</summary>
+    /// <summary>To show "Copy failed" for 2 seconds when copying fails; the reason is in the log.</summary>
     [ObservableProperty]
     public partial bool IsCopyFailed { get; set; }
 
-    /// <summary>উপরে তোলার পর নতুন CreatedAt সহ item বসায় (বা পরে screenshot চিহ্নিত হলে)।</summary>
+    /// <summary>Sets the item with a new CreatedAt after moving it to the top (or when it is later marked as a screenshot).</summary>
     public void Update(ClipboardItem item, DateTimeOffset now)
     {
         bool screenshotChanged = Item.IsScreenshot != item.IsScreenshot;
@@ -80,7 +80,7 @@ public sealed partial class ClipboardItemViewModel : ObservableObject
         var age = now - time;
         if (age < TimeSpan.FromMinutes(1))
         {
-            return "এইমাত্র";
+            return "Just now";
         }
 
         if (age < TimeSpan.FromHours(1))

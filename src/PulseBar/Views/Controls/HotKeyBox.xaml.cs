@@ -8,8 +8,8 @@ using PulseBar.ViewModels;
 namespace PulseBar.Views.Controls;
 
 /// <summary>
-/// Hotkey বদলানোর box। Click করলে "Press keys…", তারপর যে combo চাপা হয় সেটা নেয়। অন্তত একটা
-/// modifier লাগে; Esc বা focus হারালে বাতিল। নেওয়া না গেলে নিচে লাল লেখায় কারণ।
+/// Box for changing a hotkey. Click shows "Press keys…", then takes the combo that is pressed. At least one
+/// modifier is required; Esc or losing focus cancels. If it can't be used, the reason shows in red below.
 /// DataContext: <see cref="HotKeySettingViewModel"/>।
 /// </summary>
 public partial class HotKeyBox : UserControl
@@ -22,7 +22,7 @@ public partial class HotKeyBox : UserControl
     {
         InitializeComponent();
 
-        // Popup লুকালে অপেক্ষা বাতিল, যাতে hotkey গুলো ছাড়া অবস্থায় পড়ে না থাকে
+        // Cancel waiting when the popup hides, so the hotkeys aren't left released
         IsVisibleChanged += (_, _) =>
         {
             if (!IsVisible)
@@ -61,7 +61,7 @@ public partial class HotKeyBox : UserControl
             return;
         }
 
-        // Enter/Space এ button এর click বা window এর Esc যেন না চলে
+        // So Enter/Space don't click the button and Esc doesn't reach the window
         e.Handled = true;
 
         Key key = e.Key switch
@@ -81,14 +81,14 @@ public partial class HotKeyBox : UserControl
 
         if (!HotKey.IsUsableKey(key))
         {
-            // শুধু modifier চাপা: এখন পর্যন্ত কী চাপা হয়েছে দেখানো
+            // Only modifiers pressed: show what has been pressed so far
             ShowPartial(modifiers);
             return;
         }
 
         if (modifiers == ModifierKeys.None)
         {
-            // শুধু একটা অক্ষর hotkey হবে না
+            // A single letter can't be a hotkey
             ShowPartial(modifiers);
             return;
         }
@@ -126,7 +126,7 @@ public partial class HotKeyBox : UserControl
     }
 
     /// <param name="apply">
-    /// Hotkey গুলো আবার register হওয়ার আগে চলে, যাতে নতুনটা register করে দেখা যায় আর পুরনোটা ফিরে না আসে।
+    /// Runs before the hotkeys are registered again, so the new one can be test-registered and the old one doesn't come back.
     /// </param>
     private void EndCapture(Action? apply = null)
     {
@@ -149,7 +149,7 @@ public partial class HotKeyBox : UserControl
             return;
         }
 
-        // Key ছাড়া HotKey এর লেখা "Ctrl+Alt+None" হয়, তাই None এর জায়গায় "…"
+        // A HotKey without a key reads "Ctrl+Alt+None", so "…" replaces None
         string text = new HotKey(modifiers, Key.None).ToString();
         BoxText.SetCurrentValue(TextBlock.TextProperty, text[..^"None".Length] + "…");
     }

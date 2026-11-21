@@ -7,14 +7,14 @@ using PulseBar.Utilities;
 
 namespace PulseBar.Services;
 
-/// <summary>Load এর সময় কী পাওয়া গেল।</summary>
+/// <summary>What was found while loading.</summary>
 public sealed record SettingsLoadResult(bool FileExisted, bool WasCorrupt, IReadOnlyList<string> InvalidFields, bool HasLaunchAtLogin);
 
 /// <summary>
-/// Settings disk এ রাখে: %LocalAppData%\PulseBar\settings.json। প্রতিটা মান আলাদা করে পড়া হয়,
-/// তাই একটা মান ভুল হলে শুধু সেটাই default হয়; file পুরোটা নষ্ট হলে settings.json.corrupt নামে
-/// সরিয়ে রেখে default দিয়ে চলে। Save ৫০০ ms debounce করা, আগে temp file এ লিখে তারপর replace।
-/// কোনো অবস্থাতেই exception ছোড়ে না।
+/// Keeps settings on disk: %LocalAppData%\PulseBar\settings.json. Each value is read separately,
+/// so one bad value only resets that value to its default; if the whole file is corrupt it is moved
+/// aside as settings.json.corrupt and defaults are used. Saves are debounced by 500 ms, written to a temp file first, then replaced.
+/// Never throws.
 /// </summary>
 public sealed class SettingsStore : IDisposable
 {
@@ -29,7 +29,7 @@ public sealed class SettingsStore : IDisposable
     private byte[]? _pending;
     private bool _disposed;
 
-    /// <param name="directory">null হলে %LocalAppData%\PulseBar (test এ আলাদা folder দেওয়া যায়)।</param>
+    /// <param name="directory">null for %LocalAppData%\PulseBar (tests can pass another folder).</param>
     public SettingsStore(string? directory = null)
     {
         Directory = directory ?? Path.Combine(
@@ -43,7 +43,7 @@ public sealed class SettingsStore : IDisposable
 
     public string FilePath { get; }
 
-    /// <summary>File থেকে <paramref name="target"/> এ মান বসায়। না থাকা বা ভুল মান default থাকে।</summary>
+    /// <summary>Sets values from the file into <paramref name="target"/>. Missing or bad values keep their defaults.</summary>
     public SettingsLoadResult Load(AppSettings target)
     {
         var invalid = new List<string>();
@@ -59,7 +59,7 @@ public sealed class SettingsStore : IDisposable
                 using var stream = File.OpenRead(FilePath);
                 try
                 {
-                    // Stream থেকে পড়লে UTF-8 BOM থাকলেও চলে
+                    // Reading from a stream also handles a UTF-8 BOM
                     using var document = JsonDocument.Parse(stream, new JsonDocumentOptions
                     {
                         AllowTrailingCommas = true,
@@ -84,11 +84,11 @@ public sealed class SettingsStore : IDisposable
         }
         catch (Exception ex)
         {
-            // পড়া গেল না (permission, lock): default দিয়ে চলবে
+            // Couldn't read it (permission, lock): run with defaults
             Log.Error("Settings load", ex);
         }
 
-        // দুটো feature এ একই hotkey থাকবে না
+        // Two features never share a hotkey
         if (target.ScreenshotHotKey == target.ClipboardPanelHotKey)
         {
             invalid.Add(nameof(AppSettings.ScreenshotHotKey));
@@ -107,7 +107,7 @@ public sealed class SettingsStore : IDisposable
         return new SettingsLoadResult(existed, corrupt, invalid, hasLaunch);
     }
 
-    /// <summary>এরপর <paramref name="settings"/> এর প্রতিটা বদল save হবে। UI thread থেকে।</summary>
+    /// <summary>From now on every change to <paramref name="settings"/> is saved. UI thread.</summary>
     public void Attach(AppSettings settings)
     {
         if (_attached is not null)
@@ -119,7 +119,7 @@ public sealed class SettingsStore : IDisposable
         settings.PropertyChanged += OnSettingChanged;
     }
 
-    /// <summary>এখনকার মান save এর জন্য রাখে (debounce করা)। যে thread এ settings বদলায় সেখান থেকে ডাকতে হবে।</summary>
+    /// <summary>Queues the current values for saving (debounced). Call from the thread that changes settings.</summary>
     public void ScheduleSave(AppSettings settings)
     {
         byte[] bytes = Serialize(settings);
@@ -135,7 +135,7 @@ public sealed class SettingsStore : IDisposable
         }
     }
 
-    /// <summary>বাকি থাকা save এখনই লেখে।</summary>
+    /// <summary>Writes any pending save now.</summary>
     public void Flush() => WritePending();
 
     public void Dispose()
@@ -167,7 +167,7 @@ public sealed class SettingsStore : IDisposable
         {
             Indented = true,
 
-            // '+' যেন + হয়ে না যায়, file টা হাতে পড়া যায়; এটা শুধু নিজের file, browser এ যায় না
+            // Keeps '+' readable instead of escaping it; this file is only ours and never goes to a browser
             Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         }))
         {
@@ -190,10 +190,10 @@ public sealed class SettingsStore : IDisposable
         return stream.ToArray();
     }
 
-    /// <returns>File এ ঠিক LaunchAtLogin মান ছিল কিনা।</returns>
+    /// <returns>Whether the file had a valid LaunchAtLogin value.</returns>
     private static bool Read(JsonElement root, AppSettings target, List<string> invalid)
     {
-        // Version এখন শুধু লেখা হয়; পরে format বদলালে এটা দেখে পুরনো file migrate করা যাবে
+        // Version is only written for now; if the format changes later, old files can be migrated based on it
         if (root.TryGetProperty("Version", out var version) && version.ValueKind != JsonValueKind.Number)
         {
             invalid.Add("Version");
@@ -217,7 +217,7 @@ public sealed class SettingsStore : IDisposable
     {
         if (!root.TryGetProperty(name, out var value))
         {
-            return false; // পুরনো file এ নেই: default থাকবে
+            return false; // missing in an older file: the default stays
         }
 
         if (value.ValueKind is JsonValueKind.True or JsonValueKind.False)
@@ -238,7 +238,7 @@ public sealed class SettingsStore : IDisposable
             return false;
         }
 
-        // শুধু নাম দিয়ে; সংখ্যা ("2") বা অজানা নাম মানা হবে না
+        // Names only; numbers ("2") or unknown names are rejected
         if (value.ValueKind == JsonValueKind.String &&
             value.GetString() is { Length: > 0 } text &&
             !char.IsDigit(text[0]) && text[0] != '-' &&
@@ -292,14 +292,14 @@ public sealed class SettingsStore : IDisposable
             return;
         }
 
-        // Timer আর Dispose একসাথে লিখবে না
+        // The timer and Dispose never write at the same time
         lock (_writeGate)
         {
             try
             {
                 System.IO.Directory.CreateDirectory(Directory);
 
-                // মাঝপথে বন্ধ হলেও settings.json নষ্ট হবে না
+                // settings.json isn't corrupted even if we stop halfway
                 string temp = FilePath + ".tmp";
                 File.WriteAllBytes(temp, bytes);
                 File.Move(temp, FilePath, overwrite: true);

@@ -9,8 +9,8 @@ using PulseBar.Utilities;
 namespace PulseBar.Views.Controls;
 
 /// <summary>
-/// 0–100 মানের বৃত্তাকার gauge। মান অনুযায়ী রং বদলায় (accent / amber / লাল),
-/// null হলে ধূসর ring আর "N/A"।
+/// A circular gauge for 0–100 values. The color changes with the value (accent / amber / red),
+/// and null shows a gray ring and "N/A".
 /// </summary>
 public partial class RingGauge : UserControl
 {
@@ -45,12 +45,12 @@ public partial class RingGauge : UserControl
         nameof(CriticalThreshold), typeof(double), typeof(RingGauge),
         new PropertyMetadata(UsageLevels.UsageCritical, (d, _) => ((RingGauge)d).OnValueChanged()));
 
-    /// <summary>Ring এর ব্যাস (DIP); stroke আর লেখার মাপ এর সাথে মিলিয়ে বদলায়।</summary>
+    /// <summary>Ring diameter (DIP); stroke and text size scale with it.</summary>
     public static readonly DependencyProperty DiameterProperty = DependencyProperty.Register(
         nameof(Diameter), typeof(double), typeof(RingGauge),
         new PropertyMetadata(104.0, (d, _) => ((RingGauge)d).ApplyDiameter()));
 
-    /// <summary>Ring এ এখন যতটা আঁকা আছে (animation এর জন্য)।</summary>
+    /// <summary>How much of the ring is drawn now (for the animation).</summary>
     private static readonly DependencyProperty DisplayValueProperty = DependencyProperty.Register(
         "DisplayValue", typeof(double), typeof(RingGauge),
         new PropertyMetadata(0.0, (d, e) => ((RingGauge)d).DrawArc((double)e.NewValue)));
@@ -100,7 +100,7 @@ public partial class RingGauge : UserControl
         set => SetValue(SubTextProperty, value);
     }
 
-    /// <summary>সংখ্যার পরের একক, যেমন "%" বা "°C"।</summary>
+    /// <summary>Unit after the number, such as "%" or "°C".</summary>
     public string Unit
     {
         get => (string)GetValue(UnitProperty);
@@ -137,7 +137,7 @@ public partial class RingGauge : UserControl
         ValueText.SetResourceReference(TextBlock.ForegroundProperty, "TextFillColorPrimaryBrush");
         SetLevel(UsageLevels.Evaluate(v, WarningThreshold, CriticalThreshold));
 
-        // প্রথমবার মান এলে (বা N/A থেকে ফিরলে) সরাসরি বসে, পরের বদলগুলো মসৃণভাবে
+        // The first value (or coming back from N/A) is set directly; later changes animate smoothly
         SetDisplayValue(Math.Clamp(v, 0, 100), animate: _hasShownValue && SystemParameters.ClientAreaAnimation);
         _hasShownValue = true;
     }

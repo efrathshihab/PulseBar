@@ -3,8 +3,8 @@ using System.Runtime.InteropServices;
 namespace PulseBar.Services;
 
 /// <summary>
-/// Task Manager এর মতো করে GPU usage আর VRAM পড়ে (PDH এর GPU counter থেকে)।
-/// একাধিক GPU থাকলে যেটার dedicated VRAM সবচেয়ে বেশি, সেটাকে main GPU ধরে।
+/// Reads GPU usage and VRAM the way Task Manager does (from PDH's GPU counters).
+/// With several GPUs, the one with the most dedicated VRAM is treated as the main GPU.
 /// </summary>
 public sealed unsafe class GpuMonitor : IDisposable
 {
@@ -16,10 +16,10 @@ public sealed unsafe class GpuMonitor : IDisposable
     private readonly IntPtr _memoryCounter;
     private readonly bool _pdhReady;
 
-    /// <summary>Main GPU এর LUID (PDH instance নামের সাথে মেলানোর জন্য)। null মানে DXGI থেকে পাওয়া যায়নি।</summary>
+    /// <summary>LUID of the main GPU (to match PDH instance names). null means DXGI didn't provide it.</summary>
     private readonly long? _mainLuid;
 
-    // প্রতি সেকেন্ডে নতুন করে না বানিয়ে বারবার ব্যবহার
+    // Reused instead of being recreated every second
     private IntPtr _buffer;
     private uint _bufferSize;
     private readonly Dictionary<long, Dictionary<int, double>> _engineSums = [];
@@ -35,7 +35,7 @@ public sealed unsafe class GpuMonitor : IDisposable
                 return;
             }
 
-            // English path, যাতে non-English Windows এও কাজ করে
+            // English path, so it works on non-English Windows too
             bool engineOk = PdhAddEnglishCounterW(_query, EngineCounterPath, IntPtr.Zero, out _engineCounter) == 0;
             bool memoryOk = PdhAddEnglishCounterW(_query, MemoryCounterPath, IntPtr.Zero, out _memoryCounter) == 0;
             if (!engineOk)
@@ -51,7 +51,7 @@ public sealed unsafe class GpuMonitor : IDisposable
             _pdhReady = engineOk || memoryOk;
             if (_pdhReady)
             {
-                // Utilization একটা rate counter, তাই প্রথম sample শুধু ভিত্তি
+                // Utilization is a rate counter, so the first sample is only the baseline
                 PdhCollectQueryData(_query);
             }
         }
@@ -61,13 +61,13 @@ public sealed unsafe class GpuMonitor : IDisposable
         }
     }
 
-    /// <summary>Main GPU এর নাম, যেমন "NVIDIA GeForce RTX 3060"। না পেলে null।</summary>
+    /// <summary>Name of the main GPU, such as "NVIDIA GeForce RTX 3060". null if unknown.</summary>
     public string? Name { get; }
 
-    /// <summary>Main GPU এর মোট dedicated VRAM। না পেলে null।</summary>
+    /// <summary>Total dedicated VRAM of the main GPU. null if unknown.</summary>
     public ulong? TotalVramBytes { get; }
 
-    /// <summary>প্রতি সেকেন্ডে ডাকা হয়। কিছু না পেলে মানগুলো null।</summary>
+    /// <summary>Called every second. Values are null when nothing is found.</summary>
     public void Read(out double? gpuPercent, out ulong? vramUsedBytes)
     {
         gpuPercent = null;
@@ -117,8 +117,8 @@ public sealed unsafe class GpuMonitor : IDisposable
     }
 
     /// <summary>
-    /// প্রতিটা engine type (3D, Copy, VideoDecode...) এর সব instance যোগ করে,
-    /// সবচেয়ে বেশি যে type সেটাই GPU % (Task Manager এর পদ্ধতি)।
+    /// Adds up all instances of each engine type (3D, Copy, VideoDecode...),
+    /// and the busiest type is the GPU % (Task Manager's method).
     /// </summary>
     private double? ReadUsage()
     {
@@ -141,7 +141,7 @@ public sealed unsafe class GpuMonitor : IDisposable
                 continue;
             }
 
-            // যেমন: pid_1234_luid_0x00000000_0x0000D1F2_phys_0_eng_0_engtype_3D
+            // e.g. pid_1234_luid_0x00000000_0x0000D1F2_phys_0_eng_0_engtype_3D
             var name = MemoryMarshal.CreateReadOnlySpanFromNullTerminated((char*)item.Name);
             if (!TryParseLuid(name, out long luid))
             {
@@ -165,7 +165,7 @@ public sealed unsafe class GpuMonitor : IDisposable
             sums[typeKey] = current + item.Value.Double;
         }
 
-        // Main GPU এর মান; DXGI না পেলে যে GPU সবচেয়ে ব্যস্ত তার মান
+        // The main GPU's value; without DXGI, the value of the busiest GPU
         double best = 0;
         bool any = false;
         foreach (var (luid, sums) in _engineSums)
@@ -182,7 +182,7 @@ public sealed unsafe class GpuMonitor : IDisposable
             }
         }
 
-        // Main GPU এর কোনো engine এখন কাজ না করলে (instance নেই) সেটা 0%
+        // If no engine of the main GPU is working now (no instances), it's 0%
         return any || count > 0 ? Math.Clamp(best, 0, 100) : null;
     }
 
@@ -205,7 +205,7 @@ public sealed unsafe class GpuMonitor : IDisposable
                 continue;
             }
 
-            // যেমন: luid_0x00000000_0x0000D1F2_phys_0
+            // e.g. luid_0x00000000_0x0000D1F2_phys_0
             var name = MemoryMarshal.CreateReadOnlySpanFromNullTerminated((char*)item.Name);
             if (!TryParseLuid(name, out long luid) || (_mainLuid is { } main && luid != main))
             {
@@ -223,7 +223,7 @@ public sealed unsafe class GpuMonitor : IDisposable
         return found ? total : null;
     }
 
-    /// <summary>Counter এর সব instance এর মান _buffer এ আনে; buffer দরকার হলে বড় করে।</summary>
+    /// <summary>Reads all instance values of the counter into _buffer, growing the buffer when needed.</summary>
     private bool GetArray(IntPtr counter, uint format, out uint count)
     {
         uint size = _bufferSize;
@@ -236,7 +236,7 @@ public sealed unsafe class GpuMonitor : IDisposable
                 Marshal.FreeHGlobal(_buffer);
             }
 
-            // কিছুটা বাড়তি রাখা, যাতে নতুন process এলেই আবার বানাতে না হয়
+            // Keep some headroom so a new process doesn't force a rebuild right away
             _bufferSize = size + size / 4 + 1024;
             _buffer = Marshal.AllocHGlobal((int)_bufferSize);
             size = _bufferSize;
@@ -246,7 +246,7 @@ public sealed unsafe class GpuMonitor : IDisposable
         return status == 0;
     }
 
-    /// <summary>"luid_0xHHHHHHHH_0xLLLLLLLL" থেকে 64-bit LUID।</summary>
+    /// <summary>64-bit LUID from "luid_0xHHHHHHHH_0xLLLLLLLL".</summary>
     private static bool TryParseLuid(ReadOnlySpan<char> name, out long luid)
     {
         luid = 0;
@@ -268,7 +268,7 @@ public sealed unsafe class GpuMonitor : IDisposable
         return true;
     }
 
-    /// <summary>DXGI দিয়ে hardware GPU গুলো দেখে, যেটার dedicated VRAM সবচেয়ে বেশি সেটা।</summary>
+    /// <summary>Looks at the hardware GPUs through DXGI and picks the one with the most dedicated VRAM.</summary>
     private static (string? Name, ulong? TotalVram, long? Luid) FindMainAdapter()
     {
         IDXGIFactory1? factory = null;
@@ -382,7 +382,7 @@ public sealed unsafe class GpuMonitor : IDisposable
         public uint Flags;
     }
 
-    // vtable এর ক্রম মানতে হয়; যে method লাগে না সেগুলো শুধু জায়গা রাখার জন্য
+    // The vtable order must be kept; unused methods are only placeholders
     [ComImport, Guid("770aae78-f26f-4dba-a829-253c83d1b387"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
     private interface IDXGIFactory1
     {
