@@ -4,13 +4,13 @@ using H.NotifyIcon;
 using PulseBar.Models;
 using PulseBar.Services;
 using PulseBar.Utilities;
-using DrawingColor = System.Drawing.Color;
 using DrawingIcon = System.Drawing.Icon;
 
 namespace PulseBar.Views;
 
 /// <summary>
-/// Shows the CPU % number on the tray icon, colored by level; the tooltip shows CPU, GPU, RAM and master volume.
+/// Shows the CPU % number on the tray icon (violet, amber or red by level), or the app logo while CPU %
+/// isn't known yet; the tooltip shows CPU, GPU, RAM and master volume.
 /// Checks once every 2 seconds and rebuilds the icon only when the number or color changes.
 /// </summary>
 /// <remarks>
@@ -22,9 +22,8 @@ public sealed class TrayIconUpdater : IDisposable
     // Snapshots arrive every second; with a 1.5 second rule this is effectively once every 2 snapshots
     private static readonly TimeSpan MinInterval = TimeSpan.FromSeconds(1.5);
 
-    private static readonly DrawingColor Purple = DrawingColor.FromArgb(0x7C, 0x5C, 0xFF);
-    private static readonly DrawingColor Amber = ToDrawing(UsageLevels.Amber);
-    private static readonly DrawingColor Red = ToDrawing(UsageLevels.Red);
+    // Shown while there's no CPU value: the app logo instead of a number
+    private const string LogoText = "";
 
     private readonly AppState _state;
     private readonly TaskbarIcon _trayIcon;
@@ -32,7 +31,7 @@ public sealed class TrayIconUpdater : IDisposable
     private readonly Dispatcher _dispatcher;
 
     private DateTime _lastCheck = DateTime.MinValue;
-    private string _lastText = "P";
+    private string _lastText = LogoText;
     private UsageLevel _lastLevel = UsageLevel.Unknown;
     /// <summary>In Debug builds e.g. "PulseBar (dev 21:05)", to show which build is running.</summary>
     public static readonly string ToolTipTitle =
@@ -43,8 +42,10 @@ public sealed class TrayIconUpdater : IDisposable
     // The icon currently set in the tray; destroyed once the next one is set
     private DrawingIcon? _currentIcon;
 
-    public TrayIconUpdater(AppState state, TaskbarIcon trayIcon, AudioController audio, Dispatcher dispatcher)
+    /// <param name="currentIcon">The icon already in the tray (the startup logo); destroyed once replaced.</param>
+    public TrayIconUpdater(AppState state, TaskbarIcon trayIcon, AudioController audio, Dispatcher dispatcher, DrawingIcon? currentIcon)
     {
+        _currentIcon = currentIcon;
         _state = state;
         _trayIcon = trayIcon;
         _audio = audio;
@@ -78,7 +79,7 @@ public sealed class TrayIconUpdater : IDisposable
         }
         else
         {
-            text = "P";
+            text = LogoText;
             level = UsageLevel.Unknown;
         }
 
@@ -105,24 +106,24 @@ public sealed class TrayIconUpdater : IDisposable
     {
         if (iconChanged)
         {
-            var background = level switch
+            var style = level switch
             {
-                UsageLevel.Warning => Amber,
-                UsageLevel.Critical => Red,
-                _ => Purple,
+                UsageLevel.Warning => TrayIconStyle.Warning,
+                UsageLevel.Critical => TrayIconStyle.Critical,
+                _ => TrayIconStyle.Normal,
             };
-
-            // White text on amber is hard to read, so black
-            var foreground = level == UsageLevel.Warning ? DrawingColor.Black : DrawingColor.White;
 
             try
             {
-                var icon = TrayIconRenderer.Create(text, background, foreground);
-                _trayIcon.UpdateIcon(icon);
+                // If the logo can't be loaded, the previous icon stays
+                if ((text == LogoText ? TrayIconRenderer.CreateLogo() : TrayIconRenderer.Create(text, style)) is { } icon)
+                {
+                    _trayIcon.UpdateIcon(icon);
 
-                // The shell keeps its own copy, so the previous icon can be released now
-                TrayIconRenderer.Destroy(_currentIcon);
-                _currentIcon = icon;
+                    // The shell keeps its own copy, so the previous icon can be released now
+                    TrayIconRenderer.Destroy(_currentIcon);
+                    _currentIcon = icon;
+                }
             }
             catch
             {
@@ -146,6 +147,4 @@ public sealed class TrayIconUpdater : IDisposable
         { IsMuted: true } => "muted",
         _ => Percent(master.Volume * 100.0),
     };
-
-    private static DrawingColor ToDrawing(System.Windows.Media.Color c) => DrawingColor.FromArgb(c.R, c.G, c.B);
 }

@@ -1,40 +1,72 @@
-"""Generates src/PulseBar/Assets/PulseBar.ico: a white bold "P" on purple #7C5CFF.
+"""Builds the app icon files from src/PulseBar/Assets/logo.png.
 
-Each size is drawn separately (not downscaled from 256) so small sizes stay crisp.
+Writes:
+  - src/PulseBar/Assets/PulseBar.ico  (16, 20, 24, 32, 40, 48, 64, 256): exe, installer, shortcuts, tray at startup
+  - src/PulseBar/Assets/logo-96.png   (96x96): the popup header badge (22 DIP, sharp up to ~400% DPI)
+
+The logo is trimmed to its visible square first, so the icon fills the whole frame. Every size is
+resized from the full-resolution logo (not from another size); 16-32 px also get a light sharpen
+so they don't look blurry.
+
 Usage: python Scripts/make-icon.py   (needs Pillow)
 """
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageFilter
 
-PURPLE = (0x7C, 0x5C, 0xFF, 255)
-SIZES = [16, 24, 32, 48, 64, 128, 256]
-FONT = Path("C:/Windows/Fonts/segoeuib.ttf")
-OUT = Path(__file__).resolve().parent.parent / "src" / "PulseBar" / "Assets" / "PulseBar.ico"
+ASSETS = Path(__file__).resolve().parent.parent / "src" / "PulseBar" / "Assets"
+LOGO = ASSETS / "logo.png"
+ICO = ASSETS / "PulseBar.ico"
+HEADER = ASSETS / "logo-96.png"
+
+SIZES = [16, 20, 24, 32, 40, 48, 64, 256]
+
+# Sharpen settings for small sizes: (radius, percent, threshold)
+SHARPEN = {
+    16: (0.6, 140, 1),
+    20: (0.6, 120, 1),
+    24: (0.6, 110, 1),
+    32: (0.7, 90, 1),
+}
 
 
-def draw(size: int) -> Image.Image:
-    # Draw at 4x and downsample for smooth edges
-    scale = 4
-    big = size * scale
-    image = Image.new("RGBA", (big, big), (0, 0, 0, 0))
-    d = ImageDraw.Draw(image)
-    radius = int(big * 0.22)
-    d.rounded_rectangle((0, 0, big - 1, big - 1), radius=radius, fill=PURPLE)
+def load_square() -> Image.Image:
+    image = Image.open(LOGO).convert("RGBA")
 
-    font = ImageFont.truetype(str(FONT), int(big * 0.72))
-    left, top, right, bottom = d.textbbox((0, 0), "P", font=font)
-    x = (big - (right - left)) / 2 - left
-    y = (big - (bottom - top)) / 2 - top
-    d.text((x, y), "P", font=font, fill=(255, 255, 255, 255))
-    return image.resize((size, size), Image.LANCZOS)
+    # Trim the transparent margin (ignore near-invisible shadow pixels), then pad to a centered square
+    mask = image.getchannel("A").point(lambda a: 255 if a > 128 else 0)
+    box = mask.getbbox()
+    if box is None:
+        raise SystemExit("logo.png is fully transparent")
+    image = image.crop(box)
+    side = max(image.size)
+    square = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    square.paste(image, ((side - image.width) // 2, (side - image.height) // 2))
+    return square
+
+
+def render(source: Image.Image, size: int) -> Image.Image:
+    # Resize in premultiplied alpha so the edges don't get a dark fringe
+    small = source.convert("RGBa").resize((size, size), Image.LANCZOS).convert("RGBA")
+    if size in SHARPEN:
+        radius, percent, threshold = SHARPEN[size]
+        alpha = small.getchannel("A")
+        rgb = small.convert("RGB").filter(ImageFilter.UnsharpMask(radius=radius, percent=percent, threshold=threshold))
+        small = rgb.convert("RGBA")
+        small.putalpha(alpha)
+    return small
 
 
 def main() -> None:
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    images = [draw(s) for s in SIZES]
-    images[-1].save(OUT, format="ICO", sizes=[(s, s) for s in SIZES], append_images=images[:-1])
-    print(f"Wrote {OUT}")
+    source = load_square()
+    frames = {size: render(source, size) for size in SIZES}
+
+    largest = frames[SIZES[-1]]
+    others = [frames[s] for s in SIZES[:-1]]
+    largest.save(ICO, format="ICO", sizes=[(s, s) for s in SIZES], append_images=others)
+
+    render(source, 96).save(HEADER, format="PNG", optimize=True)
+    print(f"Wrote {ICO} ({', '.join(map(str, SIZES))}) and {HEADER}")
 
 
 if __name__ == "__main__":

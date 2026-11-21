@@ -219,10 +219,17 @@ public partial class App : Application
             }
         };
 
+        // The app logo until the first CPU value arrives; TrayIconUpdater owns (and later destroys) it
+        var startupIcon = TrayIconRenderer.CreateLogo();
+        if (startupIcon is not null)
+        {
+            _trayIcon.Icon = startupIcon;
+        }
+
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
         BindHotKey(HotKeyAction.ClipboardPanel, () => _clipboardPanel?.Toggle());
         BindHotKey(HotKeyAction.Screenshot, () => TakeScreenshot("hotkey"));
-        _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, _audioController, Dispatcher);
+        _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, _audioController, Dispatcher, startupIcon);
 
         // Live values on the taskbar, left of the tray's ^ arrow; clicking opens the popup like the tray icon
         _taskbarOverlay = new TaskbarOverlayHost(state, Dispatcher);

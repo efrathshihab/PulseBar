@@ -15,13 +15,7 @@
             <tb:TaskbarIcon x:Key="TrayIcon"
                             ToolTipText="PulseBar"
                             NoLeftClickDelay="True">
-                <tb:TaskbarIcon.IconSource>
-                    <tb:GeneratedIconSource Text="P"
-                                            Foreground="White"
-                                            Background="#7C5CFF"
-                                            FontWeight="Bold"
-                                            FontSize="72" />
-                </tb:TaskbarIcon.IconSource>
+                <!-- The icon (app logo, then live CPU %) is set from code: App.OnStartup and TrayIconUpdater -->
                 <tb:TaskbarIcon.ContextMenu>
                     <ContextMenu>
                         <MenuItem Header="Take screenshot" Click="TakeScreenshot_Click" />

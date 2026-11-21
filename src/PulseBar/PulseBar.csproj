@@ -20,6 +20,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Tray logo (TrayIconRenderer.CreateLogo) and the popup header badge; logo.png is only the source -->
+    <Resource Include="Assets\PulseBar.ico" />
+    <Resource Include="Assets\logo-96.png" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ApplicationDefinition Remove="App.xaml" />
     <Page Include="App.xaml" />
   </ItemGroup>
