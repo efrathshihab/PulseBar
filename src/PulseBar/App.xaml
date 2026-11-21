@@ -24,6 +24,7 @@
                 </tb:TaskbarIcon.IconSource>
                 <tb:TaskbarIcon.ContextMenu>
                     <ContextMenu>
+                        <MenuItem Header="Take screenshot" Click="TakeScreenshot_Click" />
                         <MenuItem Header="Show on taskbar"
                                   IsCheckable="True"
                                   IsChecked="True"

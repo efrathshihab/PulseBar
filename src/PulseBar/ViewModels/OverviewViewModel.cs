@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 using PulseBar.Models;
 using PulseBar.Utilities;
 
@@ -20,6 +21,7 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
 
     private readonly AppState _state;
     private readonly Dispatcher _dispatcher;
+    private readonly Action _takeScreenshot;
     private IReadOnlyList<DriveUsage>? _lastDrives;
 
     [ObservableProperty]
@@ -67,13 +69,18 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     /// <summary>System drive ছাড়া বাকি fixed drive গুলো।</summary>
     public ObservableCollection<DriveItem> OtherDrives { get; } = [];
 
-    public OverviewViewModel(AppState state, Dispatcher dispatcher)
+    /// <param name="takeScreenshot">Overview এর "Screenshot" button চাপলে।</param>
+    public OverviewViewModel(AppState state, Dispatcher dispatcher, Action takeScreenshot)
     {
         _state = state;
         _dispatcher = dispatcher;
+        _takeScreenshot = takeScreenshot;
         _state.SnapshotUpdated += OnSnapshotUpdated;
         _state.PopupVisibilityChanged += OnPopupVisibilityChanged;
     }
+
+    [RelayCommand]
+    private void TakeScreenshot() => _takeScreenshot();
 
     public void Dispose()
     {

@@ -11,6 +11,7 @@ public enum ClipboardFilter
     All,
     Text,
     Images,
+    Screenshots,
 }
 
 /// <summary>
@@ -285,6 +286,7 @@ public sealed partial class ClipboardViewModel : ObservableObject, IDisposable
         {
             ClipboardFilter.Text => vm.IsText,
             ClipboardFilter.Images => vm.IsImage,
+            ClipboardFilter.Screenshots => vm.IsScreenshot,
             _ => true,
         });
 

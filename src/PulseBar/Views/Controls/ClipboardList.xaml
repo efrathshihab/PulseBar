@@ -17,7 +17,7 @@
         <util:EnumMatchConverter x:Key="EnumMatchConverter" />
         <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
 
-        <!-- All / Text / Images chip; সব রং theme থেকে -->
+        <!-- All / Text / Images / Screenshots chip; সব রং theme থেকে -->
         <Style x:Key="ChipStyle" TargetType="RadioButton">
             <Setter Property="GroupName" Value="ClipboardFilter" />
             <Setter Property="Margin" Value="0,0,6,0" />
@@ -29,7 +29,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Border x:Name="Chip"
-                                Padding="12,4"
+                                Padding="10,4"
                                 CornerRadius="12"
                                 BorderThickness="1"
                                 Background="{DynamicResource ControlFillColorDefaultBrush}"
@@ -109,15 +109,31 @@
                             Orientation="Horizontal"
                             Margin="0,0,26,0"
                             Visibility="{Binding IsImage, Converter={StaticResource BoolToVisibility}}">
-                    <Border BorderThickness="1"
-                            BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
-                            Background="{DynamicResource ControlFillColorSecondaryBrush}">
-                        <Image Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailConverter}}"
-                               MaxWidth="120"
-                               MaxHeight="72"
-                               Stretch="Uniform"
-                               RenderOptions.BitmapScalingMode="HighQuality" />
-                    </Border>
+                    <Grid>
+                        <Border BorderThickness="1"
+                                BorderBrush="{DynamicResource CardStrokeColorDefaultBrush}"
+                                Background="{DynamicResource ControlFillColorSecondaryBrush}">
+                            <Image Source="{Binding ThumbnailPath, Converter={StaticResource ThumbnailConverter}}"
+                                   MaxWidth="120"
+                                   MaxHeight="72"
+                                   Stretch="Uniform"
+                                   RenderOptions.BitmapScalingMode="HighQuality" />
+                        </Border>
+
+                        <!-- Screenshot হলে thumbnail এর কোণায় ছোট camera badge -->
+                        <Border HorizontalAlignment="Right"
+                                VerticalAlignment="Bottom"
+                                Margin="0,0,3,3"
+                                Padding="3,2"
+                                CornerRadius="4"
+                                Background="{DynamicResource AccentFillColorDefaultBrush}"
+                                ToolTip="Screenshot"
+                                Visibility="{Binding IsScreenshot, Converter={StaticResource BoolToVisibility}}">
+                            <ui:SymbolIcon Symbol="Camera20"
+                                           FontSize="11"
+                                           Foreground="{DynamicResource TextOnAccentFillColorPrimaryBrush}" />
+                        </Border>
+                    </Grid>
                     <TextBlock Text="{Binding DisplayText}"
                                Margin="10,0,0,0"
                                VerticalAlignment="Center"
@@ -194,7 +210,12 @@
                     PreviewKeyDown="SearchBox_PreviewKeyDown" />
 
         <Grid Grid.Row="1" Margin="0,10,0,10">
-            <StackPanel Orientation="Horizontal">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
                 <RadioButton Style="{StaticResource ChipStyle}"
                              Content="All"
                              IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=All}" />
@@ -204,9 +225,13 @@
                 <RadioButton Style="{StaticResource ChipStyle}"
                              Content="Images"
                              IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Images}" />
+                <RadioButton Style="{StaticResource ChipStyle}"
+                             Content="Screenshots"
+                             IsChecked="{Binding Filter, Converter={StaticResource EnumMatchConverter}, ConverterParameter=Screenshots}" />
             </StackPanel>
 
             <ui:Button x:Name="ClearAllButton"
+                       Grid.Column="1"
                        HorizontalAlignment="Right"
                        Appearance="Transparent"
                        Padding="8,3"

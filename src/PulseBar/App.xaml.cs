@@ -32,8 +32,13 @@ public partial class App : Application
     private ClipboardViewModel? _clipboardViewModel;
     private ClipboardPanel? _clipboardPanel;
     private HotKeyManager? _hotKeys;
+    private ScreenshotWatcher? _screenshotWatcher;
     private SingleInstance? _singleInstance;
     private int _quitRequested;
+    private bool _capturing;
+
+    // Popup/panel/menu লুকানোর পরে Windows এর fade animation শেষ হওয়ার অপেক্ষা, যাতে ছবিতে না আসে
+    private static readonly TimeSpan HideBeforeCaptureDelay = TimeSpan.FromMilliseconds(200);
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -59,7 +64,7 @@ public partial class App : Application
         ApplicationThemeManager.ApplySystemTheme();
 
         var state = AppState.Current;
-        _overviewViewModel = new OverviewViewModel(state, Dispatcher);
+        _overviewViewModel = new OverviewViewModel(state, Dispatcher, () => TakeScreenshot("Overview button"));
 
         // Output device, master আর per-app volume: নিজস্ব audio thread এ চলে; popup লুকানো থাকলে UI update হয় না
         _audioController = new AudioController();
@@ -70,6 +75,14 @@ public partial class App : Application
         _clipboardManager = new ClipboardManager(new ClipboardStorage());
         _clipboardViewModel = new ClipboardViewModel(_clipboardManager, state, Dispatcher);
         _clipboardManager.Start();
+
+        // Screenshots folder এর নতুন ছবি: PulseBar এর নিজের copy history তে, দরকার হলে clipboard এও।
+        // User এর folder এর file শুধু পড়া হয়, কখনো বদলানো হয় না।
+        var settings = AppSettings.Current;
+        var clipboardManager = _clipboardManager;
+        _screenshotWatcher = new ScreenshotWatcher((data, _) =>
+            clipboardManager.AddScreenshotAsync(data, "Screenshots folder", settings.AutoCopyScreenshots));
+        _screenshotWatcher.IsEnabled = settings.WatchScreenshotsFolder;
 
         // Popup একবারই বানানো হয়; পরে শুধু Hide/Show
         _popup = new PopupWindow(_overviewViewModel, _soundViewModel, _clipboardViewModel);
@@ -124,7 +137,9 @@ public partial class App : Application
         }
 
         _trayIcon.ForceCreate(enablesEfficiencyMode: false);
-        RegisterClipboardHotKey();
+        _hotKeys = new HotKeyManager();
+        RegisterHotKey(AppSettings.Current.ClipboardPanelHotKey, () => _clipboardPanel?.Toggle());
+        RegisterHotKey(AppSettings.Current.ScreenshotHotKey, () => TakeScreenshot("hotkey"));
         _trayIconUpdater = new TrayIconUpdater(state, _trayIcon, _audioController, Dispatcher);
 
         // Tray এর ^ arrow এর বাম পাশে taskbar এর উপর live মান; click করলে tray icon এর মতোই popup
@@ -147,25 +162,76 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// Clipboard panel এর hotkey। অন্য app আগে থেকে নিয়ে রাখলে crash না করে tray থেকে জানায়;
+    /// Global hotkey। অন্য app আগে থেকে নিয়ে রাখলে crash না করে tray থেকে জানায়;
     /// tray menu বা popup তখনও কাজ করে।
     /// </summary>
-    private void RegisterClipboardHotKey()
+    private void RegisterHotKey(HotKey hotKey, Action callback)
     {
-        _hotKeys = new HotKeyManager();
-        var hotKey = AppSettings.Current.ClipboardPanelHotKey;
-        if (_hotKeys.TryRegister(hotKey, () => _clipboardPanel?.Toggle(), out _))
+        if (_hotKeys is null || _hotKeys.TryRegister(hotKey, callback, out _))
         {
             return;
         }
 
+        Notify($"{hotKey} অন্য app ব্যবহার করছে", H.NotifyIcon.Core.NotificationIcon.Warning);
+    }
+
+    private void Notify(string message, H.NotifyIcon.Core.NotificationIcon icon)
+    {
         try
         {
-            _trayIcon?.ShowNotification("PulseBar", $"{hotKey} অন্য app ব্যবহার করছে", H.NotifyIcon.Core.NotificationIcon.Warning);
+            _trayIcon?.ShowNotification("PulseBar", message, icon);
         }
         catch (Exception ex)
         {
-            Log.Error("Hotkey conflict notification", ex);
+            Log.Error("Tray notification", ex);
+        }
+    }
+
+    private void TakeScreenshot_Click(object sender, RoutedEventArgs e) => TakeScreenshot("tray menu");
+
+    /// <summary>
+    /// Windows এর screen clip খোলে (ফল clipboard এ আসে, listener নিজেই ধরে)। আগে popup আর panel
+    /// লুকায়, যাতে ছবিতে PulseBar না আসে। Snipping Tool না থাকলে mouse এর monitor এর পুরো screen
+    /// নিয়ে history আর clipboard এ দেয়।
+    /// </summary>
+    private async void TakeScreenshot(string trigger)
+    {
+        if (_capturing || _clipboardManager is not { } manager)
+        {
+            return;
+        }
+
+        _capturing = true;
+        try
+        {
+            Log.Info($"Screenshot requested ({trigger})");
+            _popup?.HidePopup();
+            _clipboardPanel?.HidePanel(restoreFocus: true);
+            await Task.Delay(HideBeforeCaptureDelay);
+
+            if (ScreenCapture.TryLaunchScreenClip())
+            {
+                return;
+            }
+
+            byte[]? png = await Task.Run(ScreenCapture.CaptureCursorMonitorPng);
+            if (png is null)
+            {
+                Notify("Screenshot নেওয়া যায়নি", H.NotifyIcon.Core.NotificationIcon.Error);
+                return;
+            }
+
+            // নিজে নেওয়া ছবি: AutoCopyScreenshots যাই হোক, clipboard এ দেওয়া হয়
+            await manager.AddScreenshotAsync(png, "PulseBar", copyToClipboard: true);
+            Notify("Snipping Tool পাওয়া যায়নি, পুরো screen নেওয়া হয়েছে", H.NotifyIcon.Core.NotificationIcon.Info);
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Screenshot", ex);
+        }
+        finally
+        {
+            _capturing = false;
         }
     }
 
@@ -253,6 +319,7 @@ public partial class App : Application
         RunStep("HotKeys", () => _hotKeys?.Dispose());
         RunStep("ClipboardPanel", () => _clipboardPanel?.CloseForShutdown());
         RunStep("ClipboardViewModel", () => _clipboardViewModel?.Dispose());
+        RunStep("ScreenshotWatcher", () => _screenshotWatcher?.Dispose());
         RunStep("ClipboardManager", () => _clipboardManager?.Dispose()); // listener, worker (২ সেকেন্ড), শেষ save
         RunStep("Popup", () => _popup?.CloseForShutdown());
         RunStep("TrayIcon", () => _trayIcon?.Dispose());

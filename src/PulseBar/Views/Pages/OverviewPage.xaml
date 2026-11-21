@@ -9,91 +9,105 @@
              xmlns:util="clr-namespace:PulseBar.Utilities"
              mc:Ignorable="d"
              d:DataContext="{d:DesignInstance Type=vm:OverviewViewModel}">
-    <StackPanel Margin="4,12,4,4">
+    <DockPanel Margin="4,12,4,4" LastChildFill="True">
 
-        <!-- 3x2 gauge: উপরে CPU, GPU, RAM; নিচে Disk, CPU Temp, GPU Temp -->
-        <UniformGrid Columns="3" Rows="2">
-            <UniformGrid.Resources>
-                <Style TargetType="controls:RingGauge">
-                    <Setter Property="Diameter" Value="84" />
-                    <Setter Property="Margin" Value="0,0,0,12" />
-                </Style>
-            </UniformGrid.Resources>
+        <!-- নিচে Screenshot button; উপরের অংশ বড় হলেও button দেখা যায় -->
+        <ui:Button DockPanel.Dock="Bottom"
+                   HorizontalAlignment="Center"
+                   Margin="0,4,0,0"
+                   Padding="12,4"
+                   FontSize="12"
+                   Content="Screenshot"
+                   Icon="{ui:SymbolIcon Camera24}"
+                   ToolTip="Ctrl+Alt+S"
+                   Command="{Binding TakeScreenshotCommand}" />
 
-            <controls:RingGauge Label="CPU"
-                                Value="{Binding CpuValue}" />
-            <controls:RingGauge Label="GPU"
-                                Value="{Binding GpuValue}"
-                                SubText="{Binding GpuSubText}"
-                                ToolTip="{Binding GpuName}" />
-            <controls:RingGauge Label="RAM"
-                                Value="{Binding RamValue}"
-                                SubText="{Binding RamSubText}" />
-            <controls:RingGauge Label="Disk"
-                                Value="{Binding DiskValue}"
-                                SubText="{Binding DiskSubText}" />
-            <controls:RingGauge Label="CPU Temp"
-                                Unit="°C"
-                                WarningThreshold="{x:Static util:UsageLevels.TempWarning}"
-                                CriticalThreshold="{x:Static util:UsageLevels.TempCritical}"
-                                Value="{Binding TempValue}"
-                                ToolTip="{Binding TempToolTip}" />
-            <controls:RingGauge Label="GPU Temp"
-                                Unit="°C"
-                                WarningThreshold="{x:Static util:UsageLevels.GpuTempWarning}"
-                                CriticalThreshold="{x:Static util:UsageLevels.GpuTempCritical}"
-                                Value="{Binding GpuTempValue}" />
-        </UniformGrid>
+        <StackPanel>
 
-        <!-- Network -->
-        <ui:Card Padding="12,10" Margin="0,0,0,10">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <ui:TextBlock Grid.Column="0"
-                              Text="{Binding DownloadText}"
-                              FontTypography="BodyStrong"
-                              HorizontalAlignment="Center" />
-                <ui:TextBlock Grid.Column="1"
-                              Text="{Binding UploadText}"
-                              FontTypography="BodyStrong"
-                              HorizontalAlignment="Center" />
-            </Grid>
-        </ui:Card>
+            <!-- 3x2 gauge: উপরে CPU, GPU, RAM; নিচে Disk, CPU Temp, GPU Temp -->
+            <UniformGrid Columns="3" Rows="2">
+                <UniformGrid.Resources>
+                    <Style TargetType="controls:RingGauge">
+                        <Setter Property="Diameter" Value="84" />
+                        <Setter Property="Margin" Value="0,0,0,12" />
+                    </Style>
+                </UniformGrid.Resources>
 
-        <!-- বাকি drive -->
-        <ItemsControl ItemsSource="{Binding OtherDrives}">
-            <ItemsControl.ItemTemplate>
-                <DataTemplate DataType="{x:Type vm:DriveItem}">
-                    <StackPanel Margin="4,0,4,10">
-                        <Grid>
-                            <TextBlock Text="{Binding Name}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
-                            <TextBlock Text="{Binding UsageText}"
-                                       HorizontalAlignment="Right"
-                                       Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
-                        </Grid>
-                        <ProgressBar x:Name="Bar"
-                                     Margin="0,6,0,0"
-                                     Height="4"
-                                     MinHeight="4"
-                                     Maximum="100"
-                                     Value="{Binding Percent, Mode=OneWay}" />
-                    </StackPanel>
-                    <!-- Gauge এর মতোই threshold: 60% এর বেশি amber, 85% এর বেশি লাল -->
-                    <DataTemplate.Triggers>
-                        <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Warning}">
-                            <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.AmberBrush}" />
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Critical}">
-                            <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.RedBrush}" />
-                        </DataTrigger>
-                    </DataTemplate.Triggers>
-                </DataTemplate>
-            </ItemsControl.ItemTemplate>
-        </ItemsControl>
-    </StackPanel>
+                <controls:RingGauge Label="CPU"
+                                    Value="{Binding CpuValue}" />
+                <controls:RingGauge Label="GPU"
+                                    Value="{Binding GpuValue}"
+                                    SubText="{Binding GpuSubText}"
+                                    ToolTip="{Binding GpuName}" />
+                <controls:RingGauge Label="RAM"
+                                    Value="{Binding RamValue}"
+                                    SubText="{Binding RamSubText}" />
+                <controls:RingGauge Label="Disk"
+                                    Value="{Binding DiskValue}"
+                                    SubText="{Binding DiskSubText}" />
+                <controls:RingGauge Label="CPU Temp"
+                                    Unit="°C"
+                                    WarningThreshold="{x:Static util:UsageLevels.TempWarning}"
+                                    CriticalThreshold="{x:Static util:UsageLevels.TempCritical}"
+                                    Value="{Binding TempValue}"
+                                    ToolTip="{Binding TempToolTip}" />
+                <controls:RingGauge Label="GPU Temp"
+                                    Unit="°C"
+                                    WarningThreshold="{x:Static util:UsageLevels.GpuTempWarning}"
+                                    CriticalThreshold="{x:Static util:UsageLevels.GpuTempCritical}"
+                                    Value="{Binding GpuTempValue}" />
+            </UniformGrid>
+
+            <!-- Network -->
+            <ui:Card Padding="12,10" Margin="0,0,0,10">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <ui:TextBlock Grid.Column="0"
+                                  Text="{Binding DownloadText}"
+                                  FontTypography="BodyStrong"
+                                  HorizontalAlignment="Center" />
+                    <ui:TextBlock Grid.Column="1"
+                                  Text="{Binding UploadText}"
+                                  FontTypography="BodyStrong"
+                                  HorizontalAlignment="Center" />
+                </Grid>
+            </ui:Card>
+
+            <!-- বাকি drive -->
+            <ItemsControl ItemsSource="{Binding OtherDrives}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:DriveItem}">
+                        <StackPanel Margin="4,0,4,10">
+                            <Grid>
+                                <TextBlock Text="{Binding Name}"
+                                           FontWeight="SemiBold"
+                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}" />
+                                <TextBlock Text="{Binding UsageText}"
+                                           HorizontalAlignment="Right"
+                                           Foreground="{DynamicResource TextFillColorSecondaryBrush}" />
+                            </Grid>
+                            <ProgressBar x:Name="Bar"
+                                         Margin="0,6,0,0"
+                                         Height="4"
+                                         MinHeight="4"
+                                         Maximum="100"
+                                         Value="{Binding Percent, Mode=OneWay}" />
+                        </StackPanel>
+                        <!-- Gauge এর মতোই threshold: 60% এর বেশি amber, 85% এর বেশি লাল -->
+                        <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Warning}">
+                                <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.AmberBrush}" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Level}" Value="{x:Static util:UsageLevel.Critical}">
+                                <Setter TargetName="Bar" Property="Foreground" Value="{x:Static util:UsageLevels.RedBrush}" />
+                            </DataTrigger>
+                        </DataTemplate.Triggers>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </DockPanel>
 </UserControl>

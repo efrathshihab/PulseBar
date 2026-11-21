@@ -47,6 +47,9 @@ PulseBar/
 - নিজের app যেন খুব কম CPU/RAM খায়
 - একবারে শুধু আজকের task এর কাজ করবে, বাড়তি feature যোগ করবে না
 - একসাথে একটাই PulseBar চলবে
+- User এর Screenshots folder এর কোনো file PulseBar কখনো মুছবে, সরাবে বা বদলাবে না, শুধু পড়বে।
+  History তে থাকবে PulseBar এর নিজের copy (%LocalAppData%\PulseBar\clipboard\images), 24h
+  retention আর Delete/Clear all শুধু ওই copy তে লাগবে
 - কাজ শেষে বলবে কোন command দিয়ে চালাতে হবে আর কী কী test করতে হবে
 - Commit message এ কোনো Co-Authored-By, Claude-Session বা AI attribution লাইন দেবে না
 - Test এর সময় user এর mouse, keyboard, screen বা clipboard এ হাত দেবে না।

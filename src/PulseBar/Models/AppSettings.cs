@@ -13,6 +13,9 @@ public sealed class AppSettings
     /// </summary>
     public static readonly HotKey DefaultClipboardPanelHotKey = new(ModifierKeys.Control | ModifierKeys.Alt, Key.V);
 
+    /// <summary>Windows এর screen clip খোলার hotkey।</summary>
+    public static readonly HotKey DefaultScreenshotHotKey = new(ModifierKeys.Control | ModifierKeys.Alt, Key.S);
+
     public static AppSettings Current { get; } = new();
 
     private AppSettings()
@@ -27,4 +30,15 @@ public sealed class AppSettings
     /// বন্ধ থাকলে শুধু copy হয়।
     /// </summary>
     public bool AutoPaste { get; set; } = true;
+
+    /// <summary>Screenshot নেওয়ার global hotkey।</summary>
+    public HotKey ScreenshotHotKey { get; set; } = DefaultScreenshotHotKey;
+
+    /// <summary>Screenshots folder এ নতুন ছবি এলে history তে যোগ করবে কিনা।</summary>
+    public bool WatchScreenshotsFolder { get; set; } = true;
+
+    /// <summary>
+    /// Screenshots folder এর নতুন ছবি clipboard এও দেবে কিনা, যাতে Win+PrtSc এর পরেই Ctrl+V করা যায়।
+    /// </summary>
+    public bool AutoCopyScreenshots { get; set; } = true;
 }

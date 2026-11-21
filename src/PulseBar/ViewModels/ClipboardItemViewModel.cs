@@ -24,6 +24,9 @@ public sealed partial class ClipboardItemViewModel : ObservableObject
 
     public bool IsImage => Item.Kind == ClipboardItemKind.Image;
 
+    /// <summary>Card এর কোণায় camera badge।</summary>
+    public bool IsScreenshot => Item.IsScreenshot;
+
     /// <summary>Text এর preview, অথবা ছবির মাপ যেমন "3840 × 2160"।</summary>
     public string DisplayText { get; }
 
@@ -42,11 +45,17 @@ public sealed partial class ClipboardItemViewModel : ObservableObject
     [ObservableProperty]
     public partial bool IsCopyFailed { get; set; }
 
-    /// <summary>উপরে তোলার পর নতুন CreatedAt সহ item বসায়।</summary>
+    /// <summary>উপরে তোলার পর নতুন CreatedAt সহ item বসায় (বা পরে screenshot চিহ্নিত হলে)।</summary>
     public void Update(ClipboardItem item, DateTimeOffset now)
     {
+        bool screenshotChanged = Item.IsScreenshot != item.IsScreenshot;
         Item = item;
         RefreshTime(now);
+
+        if (screenshotChanged)
+        {
+            OnPropertyChanged(nameof(IsScreenshot));
+        }
     }
 
     public void RefreshTime(DateTimeOffset now) => RelativeTime = FormatRelative(Item.CreatedAt, now);

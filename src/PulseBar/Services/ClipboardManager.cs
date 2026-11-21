@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Concurrent;
 using System.Diagnostics;
@@ -6,6 +7,7 @@ using System.Runtime;
 using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
+using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Threading;
 using System.Windows.Media;
@@ -41,6 +43,17 @@ public sealed class ClipboardManager : IDisposable
     // একসাথে অনেকগুলো update এলে (কিছু app কয়েকবার লেখে) শেষেরটাই পড়া হয়
     private const int CoalesceDelayMs = 80;
 
+    // Win+Shift+S একই ছবি clipboard এ দেয় আবার Screenshots folder এও save করে। দুই দিক থেকে
+    // আসা একই মাপের ছবি এর মধ্যে এলে একই ধরা হয় (PNG এর bytes আলাদা হতে পারে)।
+    private const long SameSizeWindowMs = 5_000;
+
+    // Pixel hash মিলিয়ে duplicate খোঁজা হয় এতক্ষণের ছবিতে
+    private const long RecentImageWindowMs = 60_000;
+    private const int MaxRecentImages = 16;
+
+    // এদের থেকে আসা clipboard ছবি screenshot (Win+Shift+S, Snipping Tool)
+    private static readonly string[] ScreenshotTools = ["ScreenClippingHost.exe", "SnippingTool.exe"];
+
     private readonly ClipboardStorage _storage;
     private readonly Lock _gate = new();
     private readonly AutoResetEvent _signal = new(false);
@@ -59,6 +72,12 @@ public sealed class ClipboardManager : IDisposable
     private Thread? _worker;
     private uint _lastSequence;
     private bool _handledImage;
+
+    // WM_CLIPBOARDUPDATE এর সময়ের owner এর exe; Screen Clipping পড়ার আগেই বন্ধ হয়ে যেতে পারে
+    private volatile string? _notifiedOwnerExe;
+
+    // সাম্প্রতিক ছবি, duplicate চেনার জন্য; শুধু worker thread এ ব্যবহার হয়
+    private readonly List<RecentImage> _recentImages = [];
     private volatile bool _disposed;
 
     public ClipboardManager(ClipboardStorage storage)
@@ -170,6 +189,7 @@ public sealed class ClipboardManager : IDisposable
         {
             if (!_disposed)
             {
+                _notifiedOwnerExe = OwnerExeNow();
                 _clipboardChanged = true;
                 _signal.Set();
             }
@@ -647,15 +667,277 @@ public sealed class ClipboardManager : IDisposable
                 return;
             }
 
-            var item = SaveImage(data, raw.ImageIsPng, hash, sourceApp);
+            if (Decode(data, raw.ImageIsPng) is not { } frame)
+            {
+                return;
+            }
+
+            // Owner পড়ার সময় বন্ধ হয়ে গেলে notification এর সময়েরটা
+            string? ownerExe = Path.GetFileName(GetProcessPath(raw.OwnerProcessId)) ?? _notifiedOwnerExe;
+            bool isScreenshot = IsScreenshotTool(ownerExe);
+            string? pixelHash = isScreenshot ? PixelHash(frame) : null;
+
+            // Folder এর file আগে এসে গেলে একই screenshot দ্বিতীয়বার না
+            if (isScreenshot && FindRecentDuplicate(frame, pixelHash, fromClipboard: true) is { } existingId)
+            {
+                Log.Info("Screenshot from clipboard is already in history (from the Screenshots folder)");
+                Promote(existingId);
+                return;
+            }
+
+            var item = SaveImage(frame, raw.ImageIsPng ? data : null, hash, sourceApp, isScreenshot);
             if (item is not null)
             {
                 AddOrPromote(ClipboardItemKind.Image, hash, () => item);
+                RememberRecent(item.Id, frame, pixelHash, fromClipboard: true);
             }
         }
     }
 
-    private ClipboardItem? SaveImage(byte[] data, bool isPng, string hash, string? sourceApp)
+    /// <summary>
+    /// Screenshots folder এর নতুন file বা নিজের নেওয়া screenshot history তে যোগ করে
+    /// (<see cref="ClipboardItem.IsScreenshot"/> = true)। একই ছবি আগেই থাকলে (Win+Shift+S clipboard
+    /// এও দেয়) নতুন item হয় না। <paramref name="copyToClipboard"/> হলে নতুন item টা clipboard এও
+    /// দেয় (PNG + DIB); সেটা নিজের লেখা, তাই listener আবার নতুন item বানায় না।
+    /// ফল: নতুন item যোগ হলে true। কোনো অবস্থাতেই exception ছোড়ে না।
+    /// </summary>
+    public Task<bool> AddScreenshotAsync(byte[] data, string? sourceApp, bool copyToClipboard)
+    {
+        var result = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        bool queued = Enqueue(() =>
+        {
+            try
+            {
+                result.TrySetResult(AddScreenshot(data, sourceApp, copyToClipboard));
+            }
+            catch (Exception ex)
+            {
+                Log.Error("Screenshot add", ex);
+                result.TrySetResult(false);
+            }
+        });
+
+        if (!queued)
+        {
+            result.TrySetResult(false);
+        }
+
+        return result.Task;
+    }
+
+    /// <summary>Worker thread এ চলে।</summary>
+    private bool AddScreenshot(byte[] data, string? sourceApp, bool copyToClipboard)
+    {
+        _handledImage = true;
+        string hash = Convert.ToHexString(SHA256.HashData(data));
+
+        if (Decode(data, isPng: null) is not { } frame)
+        {
+            Log.Error("Screenshot: could not decode the image");
+            return false;
+        }
+
+        string pixelHash = PixelHash(frame);
+        string? existingId;
+        lock (_gate)
+        {
+            existingId = _items.Find(i => i.Kind == ClipboardItemKind.Image && i.ContentHash == hash)?.Id;
+        }
+
+        existingId ??= FindRecentDuplicate(frame, pixelHash, fromClipboard: false);
+        if (existingId is not null)
+        {
+            // যেমন Win+Shift+S: ছবিটা আগেই clipboard থেকে এসেছে, এখন শুধু screenshot চিহ্ন
+            Log.Info("Screenshot is already in history; not added again");
+            MarkScreenshot(existingId);
+            return false;
+        }
+
+        var item = SaveImage(frame, IsPng(data) ? data : null, hash, sourceApp, isScreenshot: true);
+        if (item is null)
+        {
+            return false;
+        }
+
+        AddOrPromote(ClipboardItemKind.Image, hash, () => item);
+        RememberRecent(item.Id, frame, pixelHash, fromClipboard: false);
+        Log.Info($"Screenshot added ({item.Preview})");
+
+        if (copyToClipboard && WriteToClipboard(item) is { } error)
+        {
+            Log.Error($"Screenshot copy to clipboard failed: {error}");
+        }
+
+        return true;
+    }
+
+    /// <summary>Item কে screenshot হিসেবে চিহ্নিত করে (আগে থেকে না থাকলে)।</summary>
+    private void MarkScreenshot(string id)
+    {
+        ClipboardItem[] snapshot;
+        lock (_gate)
+        {
+            int index = _items.FindIndex(i => i.Id == id);
+            if (index < 0 || _items[index].IsScreenshot)
+            {
+                return;
+            }
+
+            _items[index] = _items[index] with { IsScreenshot = true };
+            snapshot = [.. _items];
+        }
+
+        _storage.ScheduleSave(snapshot);
+        HistoryChanged?.Invoke(this, EventArgs.Empty);
+    }
+
+    // ---------------- Screenshot duplicate ----------------
+
+    private sealed record RecentImage(string Id, int Width, int Height, string? PixelHash, bool FromClipboard, long Tick);
+
+    private void RememberRecent(string id, BitmapSource frame, string? pixelHash, bool fromClipboard)
+    {
+        _recentImages.Insert(0, new RecentImage(id, frame.PixelWidth, frame.PixelHeight, pixelHash, fromClipboard, Environment.TickCount64));
+        if (_recentImages.Count > MaxRecentImages)
+        {
+            _recentImages.RemoveRange(MaxRecentImages, _recentImages.Count - MaxRecentImages);
+        }
+    }
+
+    /// <summary>
+    /// একই ছবি সম্প্রতি এসেছে কিনা: একই pixel hash, অথবা অন্য দিক থেকে (clipboard বনাম folder)
+    /// ৫ সেকেন্ডের মধ্যে একই মাপের ছবি। এখনো history তে থাকা item এর id দেয়।
+    /// </summary>
+    private string? FindRecentDuplicate(BitmapSource frame, string? pixelHash, bool fromClipboard)
+    {
+        long now = Environment.TickCount64;
+        _recentImages.RemoveAll(r => now - r.Tick > RecentImageWindowMs);
+
+        foreach (var recent in _recentImages)
+        {
+            bool samePixels = pixelHash is not null && recent.PixelHash == pixelHash;
+            bool sameSizeOtherSide = recent.FromClipboard != fromClipboard &&
+                recent.Width == frame.PixelWidth &&
+                recent.Height == frame.PixelHeight &&
+                now - recent.Tick <= SameSizeWindowMs;
+
+            if (!samePixels && !sameSizeOtherSide)
+            {
+                continue;
+            }
+
+            lock (_gate)
+            {
+                if (_items.Exists(i => i.Id == recent.Id))
+                {
+                    return recent.Id;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Decode করা pixel এর SHA-256 (alpha বাদে), যাতে একই ছবি PNG আর DIB/অন্য encoder এ এলেও মেলে।
+    /// একবারে পুরো ছবি না, কয়েক সারি করে পড়া হয়।
+    /// </summary>
+    internal static string PixelHash(BitmapSource frame)
+    {
+        BitmapSource bgra = frame.Format == PixelFormats.Bgra32
+            ? frame
+            : new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
+
+        int width = bgra.PixelWidth;
+        int height = bgra.PixelHeight;
+        int stride = width * 4;
+        const int rowsPerChunk = 16;
+
+        using var sha = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        Span<byte> size = stackalloc byte[8];
+        BinaryPrimitives.WriteInt32LittleEndian(size, width);
+        BinaryPrimitives.WriteInt32LittleEndian(size[4..], height);
+        sha.AppendData(size);
+
+        byte[] buffer = ArrayPool<byte>.Shared.Rent(stride * Math.Min(rowsPerChunk, height));
+        try
+        {
+            for (int y = 0; y < height; y += rowsPerChunk)
+            {
+                int rows = Math.Min(rowsPerChunk, height - y);
+                int length = rows * stride;
+                bgra.CopyPixels(new Int32Rect(0, y, width, rows), buffer, stride, 0);
+
+                // কোনো encoder alpha 0 রাখে, কেউ 255; screenshot এ alpha এর মানে নেই
+                for (int i = 3; i < length; i += 4)
+                {
+                    buffer[i] = 0;
+                }
+
+                sha.AppendData(buffer, 0, length);
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(buffer);
+        }
+
+        return Convert.ToHexString(sha.GetHashAndReset());
+    }
+
+    private static bool IsScreenshotTool(string? exeName) =>
+        exeName is not null && ScreenshotTools.Contains(exeName, StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>এই মুহূর্তের clipboard owner এর exe এর নাম; নিজে হলে বা না পেলে null। UI thread এ, খুব কম খরচে।</summary>
+    private static string? OwnerExeNow()
+    {
+        IntPtr owner = GetClipboardOwner();
+        if (owner == IntPtr.Zero)
+        {
+            return null;
+        }
+
+        GetWindowThreadProcessId(owner, out uint pid);
+        return pid == (uint)Environment.ProcessId ? null : Path.GetFileName(GetProcessPath(pid));
+    }
+
+    private static bool IsPng(byte[] data) =>
+        data.Length > 8 && data[0] == 0x89 && data[1] == (byte)'P' && data[2] == (byte)'N' && data[3] == (byte)'G';
+
+    /// <summary>
+    /// ছবি decode করে। <paramref name="isPng"/> null হলে format নিজে থেকে চেনা হয় (PNG, JPG ইত্যাদি)।
+    /// নষ্ট বা অস্বাভাবিক বড় হলে null।
+    /// </summary>
+    internal static BitmapSource? Decode(byte[] data, bool? isPng)
+    {
+        try
+        {
+            using var input = new MemoryStream(data, writable: false);
+            BitmapDecoder decoder = isPng switch
+            {
+                true => new PngBitmapDecoder(input, BitmapCreateOptions.None, BitmapCacheOption.OnLoad),
+                false => new BmpBitmapDecoder(input, BitmapCreateOptions.None, BitmapCacheOption.OnLoad),
+                null => BitmapDecoder.Create(input, BitmapCreateOptions.None, BitmapCacheOption.OnLoad),
+            };
+
+            BitmapSource frame = decoder.Frames[0];
+            if (frame.PixelWidth <= 0 || frame.PixelHeight <= 0 ||
+                (long)frame.PixelWidth * frame.PixelHeight * 4 > MaxRawImageBytes)
+            {
+                return null;
+            }
+
+            return frame;
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Clipboard image decode", ex);
+            return null;
+        }
+    }
+
+    /// <param name="png">ছবিটা আগে থেকেই PNG হলে তার bytes; তখন আবার encode না করে হুবহু লেখা হয়।</param>
+    private ClipboardItem? SaveImage(BitmapSource frame, byte[]? png, string hash, string? sourceApp, bool isScreenshot)
     {
         string id = NewId();
         string imagePath = _storage.ImagePathFor(id);
@@ -665,21 +947,10 @@ public sealed class ClipboardManager : IDisposable
         {
             Directory.CreateDirectory(_storage.ImagesDirectory);
 
-            using var input = new MemoryStream(data, writable: false);
-            BitmapDecoder decoder = isPng
-                ? new PngBitmapDecoder(input, BitmapCreateOptions.None, BitmapCacheOption.OnLoad)
-                : new BmpBitmapDecoder(input, BitmapCreateOptions.None, BitmapCacheOption.OnLoad);
-
-            BitmapSource frame = decoder.Frames[0];
-            if (frame.PixelWidth <= 0 || frame.PixelHeight <= 0)
-            {
-                return null;
-            }
-
-            if (isPng)
+            if (png is not null)
             {
                 // আগে থেকেই PNG, আবার encode না করে হুবহু লেখা হয় (alpha ঠিক থাকে)
-                File.WriteAllBytes(imagePath, data);
+                File.WriteAllBytes(imagePath, png);
             }
             else
             {
@@ -711,6 +982,7 @@ public sealed class ClipboardManager : IDisposable
                 SourceApp = sourceApp,
                 CreatedAt = DateTimeOffset.Now,
                 ContentHash = hash,
+                IsScreenshot = isScreenshot,
             };
         }
         catch (Exception ex)
@@ -1062,6 +1334,11 @@ public sealed class ClipboardManager : IDisposable
 
     private static string? GetProcessPath(uint processId)
     {
+        if (processId == 0)
+        {
+            return null;
+        }
+
         // Limited query admin ছাড়াও অন্য user/elevated process এ সাধারণত কাজ করে
         IntPtr process = OpenProcess(ProcessQueryLimitedInformation, false, processId);
         if (process == IntPtr.Zero)

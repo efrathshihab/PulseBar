@@ -37,6 +37,12 @@ public sealed record ClipboardItem
 
     public required DateTimeOffset CreatedAt { get; init; }
 
+    /// <summary>
+    /// Snipping Tool / Screen Clipping থেকে এসেছে, বা Screenshots folder এর নতুন file। পুরনো
+    /// history.json এ এই field নেই, তখন false।
+    /// </summary>
+    public bool IsScreenshot { get; init; }
+
     /// <summary>একই জিনিস দ্বিতীয়বার copy হলে চেনার জন্য SHA-256 (hex)।</summary>
     public required string ContentHash { get; init; }
 
