@@ -41,9 +41,17 @@
     </UserControl.Resources>
 
     <!-- Nearly transparent background, so clicks register anywhere on it -->
-    <Border Background="#01000000" Padding="4,0">
+    <Border Background="#01000000"
+            Padding="4,0"
+            ToolTip="{Binding ToolTipText, Mode=OneWay}"
+            ToolTipService.InitialShowDelay="400">
         <Grid>
-            <!-- Balanced: 2x2. Fixed widths so the text doesn't jiggle when numbers change -->
+            <!--
+                Balanced: each thing's usage and temperature on one row.
+                  CPU  5%  45°C   (no CPU temp: CPU  5%  RAM 85%)
+                  GPU  1%  54°C   (no GPU temp: GPU  1%)
+                Fixed widths, so the text doesn't jiggle when numbers change and the total width stays the same.
+            -->
             <Grid x:Name="BalancedGrid" VerticalAlignment="Center">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="24" />
@@ -60,16 +68,16 @@
                 <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="CPU" />
                 <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource OverlayValue}"
                            Text="{Binding CpuText, Mode=OneWay}" Tag="{Binding CpuLevel, Mode=OneWay}" />
-                <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
+                <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource OverlayLabel}"
+                           Text="{Binding Row1ExtraLabel, Mode=OneWay}" />
                 <TextBlock Grid.Row="0" Grid.Column="4" Style="{StaticResource OverlayValue}"
-                           Text="{Binding GpuText, Mode=OneWay}" Tag="{Binding GpuLevel, Mode=OneWay}" />
+                           Text="{Binding Row1ExtraText, Mode=OneWay}" Tag="{Binding Row1ExtraLevel, Mode=OneWay}" />
 
-                <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="RAM" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="GPU" />
                 <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource OverlayValue}"
-                           Text="{Binding RamText, Mode=OneWay}" Tag="{Binding RamLevel, Mode=OneWay}" />
-                <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
+                           Text="{Binding GpuText, Mode=OneWay}" Tag="{Binding GpuLevel, Mode=OneWay}" />
                 <TextBlock Grid.Row="1" Grid.Column="4" Style="{StaticResource OverlayValue}"
-                           Text="{Binding GpuTempText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
+                           Text="{Binding GpuTempRowText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
             </Grid>
 
             <!-- Compact: CPU + RAM in one row with slightly larger text; same width as Balanced -->

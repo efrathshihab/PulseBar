@@ -45,12 +45,46 @@
                 <controls:RingGauge Label="Disk"
                                     Value="{Binding DiskValue}"
                                     SubText="{Binding DiskSubText}" />
-                <controls:RingGauge Label="CPU Temp"
-                                    Unit="°C"
-                                    WarningThreshold="{x:Static util:UsageLevels.TempWarning}"
-                                    CriticalThreshold="{x:Static util:UsageLevels.TempCritical}"
-                                    Value="{Binding TempValue}"
-                                    ToolTip="{Binding TempToolTip}" />
+                <!-- The action sits on the gauge's (empty) sub-text line, so the grid keeps its size -->
+                <Grid ToolTip="{Binding TempToolTip}">
+                    <controls:RingGauge Label="CPU Temp"
+                                        Unit="°C"
+                                        WarningThreshold="{x:Static util:UsageLevels.TempWarning}"
+                                        CriticalThreshold="{x:Static util:UsageLevels.TempCritical}"
+                                        Value="{Binding TempValue}" />
+                    <TextBlock Margin="0,0,0,12"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Bottom"
+                               FontSize="11">
+                        <Hyperlink Click="EnableCpuTemp_Click" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" TextDecorations="None" AutomationProperties.Name="Enable CPU temperature">Enable</Hyperlink>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowEnableCpuTemp}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                    <TextBlock Margin="0,0,0,12"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Bottom"
+                               FontSize="11">
+                        <Hyperlink Command="{Binding InstallDriverCommand}" Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}" TextDecorations="None" ToolTip="{x:Static vm:OverviewViewModel.PawnIoUrl}" AutomationProperties.Name="Install PawnIO driver">Install driver</Hyperlink>
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ShowInstallDriver}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
                 <controls:RingGauge Label="GPU Temp"
                                     Unit="°C"
                                     WarningThreshold="{x:Static util:UsageLevels.GpuTempWarning}"

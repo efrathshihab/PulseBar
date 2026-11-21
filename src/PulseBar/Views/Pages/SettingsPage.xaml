@@ -71,7 +71,7 @@
                 <ui:CardControl.Header>
                     <StackPanel>
                         <TextBlock Style="{StaticResource CardTitle}" Text="Launch at login" />
-                        <TextBlock Style="{StaticResource CardDescription}" Text="With admin: needed for CPU temperature" />
+                        <TextBlock Style="{StaticResource CardDescription}" Text="With admin: starts PulseBar as administrator, which Windows requires for reading CPU temperature" />
                     </StackPanel>
                 </ui:CardControl.Header>
                 <ComboBox ItemsSource="{Binding LaunchOptions}"

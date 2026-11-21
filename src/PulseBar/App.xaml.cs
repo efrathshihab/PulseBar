@@ -72,13 +72,19 @@ public partial class App : Application
         }
 
         bool atLogin = e.Args.Contains(StartupManager.StartupArg, StringComparer.OrdinalIgnoreCase);
+
+        // Started by "Enable" under CPU Temp: replace the running (non-admin) instance and open the popup
+        bool elevatedRestart = e.Args.Contains(AdminRestart.Arg, StringComparer.OrdinalIgnoreCase);
         Log.Info($"Starting PulseBar (PID {Environment.ProcessId}, {BuildInfo.DevLabel ?? "release"}" +
             $"{(atLogin ? ", at login" : "")}{(StartupManager.IsElevated ? ", admin" : "")})");
 
         // Only one PulseBar at a time. Release: shows the running one's popup and this one exits.
         // Debug: closes the running one and this one runs, so dotnet run always runs the latest code.
         // Started at login: nothing opens; if one is already running, exit quietly.
-        _singleInstance = SingleInstance.TryAcquire(replaceExisting: BuildInfo.IsDebug && !atLogin, activateExisting: !atLogin);
+        // Restarted as admin: ask the old instance to quit and wait for it, like a Debug build does.
+        _singleInstance = SingleInstance.TryAcquire(
+            replaceExisting: BuildInfo.IsDebug && !atLogin || elevatedRestart,
+            activateExisting: !atLogin);
         if (_singleInstance is null)
         {
             Log.Info("Another instance is running; exiting");
@@ -109,7 +115,7 @@ public partial class App : Application
         _theme.Apply(settings.Theme);
 
         var state = AppState.Current;
-        _overviewViewModel = new OverviewViewModel(state, Dispatcher, () => TakeScreenshot("Overview button"));
+        _overviewViewModel = new OverviewViewModel(state, Dispatcher, () => TakeScreenshot("Overview button"), RestartAsAdmin);
 
         // Output device, master and per-app volume: runs on its own audio thread; no UI updates while the popup is hidden
         _audioController = new AudioController();
@@ -237,6 +243,12 @@ public partial class App : Application
 
         _updateService.Start();
 
+        if (elevatedRestart)
+        {
+            // The user clicked "Enable" in the popup; show it again so CPU Temp is visible
+            Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () => _popup?.ShowPopup());
+        }
+
         Log.Info("Started");
 
         // After startup finishes, so the panel opens quickly even on the first hotkey
@@ -292,6 +304,19 @@ public partial class App : Application
                 _clipboardManager?.IsCaptureEnabled = settings.ClipboardEnabled;
                 _screenshotWatcher?.IsEnabled = settings.WatchScreenshotsFolder && settings.ClipboardEnabled;
                 break;
+        }
+    }
+
+    /// <summary>
+    /// "Enable" under CPU Temp: starts an elevated instance, which then asks this one to quit. If UAC is
+    /// declined nothing changes and this instance keeps running.
+    /// </summary>
+    private void RestartAsAdmin()
+    {
+        _settingsStore?.Flush();
+        if (AdminRestart.TryStart() == StartupApplyOutcome.Failed)
+        {
+            Notify("Couldn't restart as administrator", H.NotifyIcon.Core.NotificationIcon.Error);
         }
     }
 

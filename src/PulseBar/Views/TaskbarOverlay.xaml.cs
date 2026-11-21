@@ -6,7 +6,8 @@ using PulseBar.Models;
 namespace PulseBar.Views;
 
 /// <summary>
-/// Text on the taskbar: 2x2 in Balanced (CPU, GPU, RAM, GPU temp), CPU + RAM in one row in Compact.
+/// Text on the taskbar: in Balanced, CPU and GPU usage + temperature on two rows (RAM takes the CPU temp
+/// spot when there is no CPU temperature); in Compact, CPU + RAM in one row.
 /// Appearance only; where it goes is decided by
 /// TaskbarOverlayHost.
 /// </summary>

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -22,6 +23,17 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     private readonly AppState _state;
     private readonly Dispatcher _dispatcher;
     private readonly Action _takeScreenshot;
+    private readonly Action _restartAsAdmin;
+
+    /// <summary>Official PawnIO project page (by namazso); its download is the signed installer.</summary>
+    public const string PawnIoUrl = "https://pawnio.eu/";
+
+    public const string NotAdminToolTip =
+        "Windows only lets administrator apps read CPU temperature. " +
+        "Turn on 'Launch at login → With admin' in Settings to always see it.";
+
+    public const string NoDriverToolTip =
+        "CPU temperature needs the PawnIO driver. Install it, then restart PulseBar.";
     private IReadOnlyList<DriveUsage>? _lastDrives;
 
     [ObservableProperty]
@@ -60,6 +72,14 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     public partial string? TempToolTip { get; set; }
 
+    /// <summary>"Enable" under CPU Temp: not running as admin.</summary>
+    [ObservableProperty]
+    public partial bool ShowEnableCpuTemp { get; set; }
+
+    /// <summary>"Install driver" under CPU Temp: admin, but PawnIO is missing.</summary>
+    [ObservableProperty]
+    public partial bool ShowInstallDriver { get; set; }
+
     [ObservableProperty]
     public partial string DownloadText { get; set; } = $"↓ {NotAvailable}";
 
@@ -70,17 +90,36 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
     public ObservableCollection<DriveItem> OtherDrives { get; } = [];
 
     /// <param name="takeScreenshot">When Overview's "Screenshot" button is pressed.</param>
-    public OverviewViewModel(AppState state, Dispatcher dispatcher, Action takeScreenshot)
+    /// <param name="restartAsAdmin">After the user confirms "Enable" under CPU Temp: restart PulseBar as administrator.</param>
+    public OverviewViewModel(AppState state, Dispatcher dispatcher, Action takeScreenshot, Action restartAsAdmin)
     {
         _state = state;
         _dispatcher = dispatcher;
         _takeScreenshot = takeScreenshot;
+        _restartAsAdmin = restartAsAdmin;
         _state.SnapshotUpdated += OnSnapshotUpdated;
         _state.PopupVisibilityChanged += OnPopupVisibilityChanged;
     }
 
     [RelayCommand]
     private void TakeScreenshot() => _takeScreenshot();
+
+    /// <summary>Called after the confirm dialog.</summary>
+    [RelayCommand]
+    private void EnableCpuTemp() => _restartAsAdmin();
+
+    [RelayCommand]
+    private static void InstallDriver()
+    {
+        try
+        {
+            Process.Start(new ProcessStartInfo(PawnIoUrl) { UseShellExecute = true })?.Dispose();
+        }
+        catch (Exception ex)
+        {
+            Log.Error("Open PawnIO page", ex);
+        }
+    }
 
     public void Dispose()
     {
@@ -134,11 +173,15 @@ public sealed partial class OverviewViewModel : ObservableObject, IDisposable
         TempValue = Round(s.CpuTempCelsius);
         TempToolTip = s.CpuTempCelsius is not null ? null : s.CpuTempStatus switch
         {
-            TemperatureStatus.NotAdmin => "Requires running as administrator",
-            TemperatureStatus.NoDriver => "PawnIO driver is not installed",
+            TemperatureStatus.NotAdmin => NotAdminToolTip,
+            TemperatureStatus.NoDriver => NoDriverToolTip,
             TemperatureStatus.NoSensor => "No CPU temperature sensor found",
             _ => null,
         };
+
+        // The actions disappear as soon as a temperature is read
+        ShowEnableCpuTemp = s.CpuTempCelsius is null && s.CpuTempStatus == TemperatureStatus.NotAdmin;
+        ShowInstallDriver = s.CpuTempCelsius is null && s.CpuTempStatus == TemperatureStatus.NoDriver;
 
         DownloadText = "↓ " + (s.DownloadBytesPerSec is { } d ? ByteFormatter.FormatSpeed(d) : NotAvailable);
         UploadText = "↑ " + (s.UploadBytesPerSec is { } u ? ByteFormatter.FormatSpeed(u) : NotAvailable);
