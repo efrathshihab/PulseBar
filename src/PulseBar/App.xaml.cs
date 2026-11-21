@@ -201,7 +201,6 @@ public partial class App : Application
             _popup.Toggle();
         };
         _taskbarOverlay.Layout = settings.OverlayLayout;
-        _taskbarOverlay.Theme = settings.Theme;
         _taskbarOverlay.IsEnabled = settings.ShowTaskbarOverlay;
 
         // Settings tab বা tray menu থেকে বদল সাথে সাথে কাজ করবে
@@ -246,7 +245,6 @@ public partial class App : Application
         {
             case nameof(AppSettings.Theme):
                 _theme?.Apply(settings.Theme);
-                _taskbarOverlay?.Theme = settings.Theme;
                 break;
 
             case nameof(AppSettings.ShowTaskbarOverlay):

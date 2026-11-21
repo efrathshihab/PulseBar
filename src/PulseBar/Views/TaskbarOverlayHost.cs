@@ -40,7 +40,6 @@ public sealed class TaskbarOverlayHost : IDisposable
     private IntPtr _taskbar;
     private Placement? _lastPlacement;
     private bool _isLightTaskbar;
-    private bool? _lightOverride;
     private OverlayLayout _layout = OverlayLayout.Balanced;
     private bool _enabled;
     private bool _disposed;
@@ -121,25 +120,6 @@ public sealed class TaskbarOverlayHost : IDisposable
             }
         }
     }
-
-    /// <summary>
-    /// App এর theme: System হলে লেখার রং taskbar এর theme অনুসরণ করে; Light/Dark হলে সেটাই। UI thread থেকে।
-    /// </summary>
-    public AppTheme Theme
-    {
-        set
-        {
-            _lightOverride = value switch
-            {
-                AppTheme.Light => true,
-                AppTheme.Dark => false,
-                _ => null,
-            };
-            ApplyTheme();
-        }
-    }
-
-    private bool IsLight => _lightOverride ?? _isLightTaskbar;
 
     public void Dispose()
     {
@@ -234,7 +214,7 @@ public sealed class TaskbarOverlayHost : IDisposable
             newSource.AddHook(OverlayHook);
 
             var view = new TaskbarOverlay { DataContext = _viewModel };
-            view.ApplyTheme(IsLight);
+            view.ApplyTheme(_isLightTaskbar);
             view.ApplyLayout(_layout);
             view.MouseLeftButtonUp += OnOverlayMouseUp;
             newSource.RootVisual = view;
@@ -409,17 +389,22 @@ public sealed class TaskbarOverlayHost : IDisposable
         });
     }
 
+    /// <summary>
+    /// লেখার রং সবসময় Windows এর taskbar এর রং (SystemUsesLightTheme) অনুসরণ করে, PulseBar এর
+    /// Theme setting না; না হলে dark taskbar এ কালো লেখা পড়া যেত না।
+    /// </summary>
     private void UpdateTheme()
     {
-        _isLightTaskbar = TaskbarInterop.IsTaskbarLight();
-        ApplyTheme();
-    }
+        bool isLight = TaskbarInterop.IsTaskbarLight();
+        if (isLight == _isLightTaskbar)
+        {
+            return;
+        }
 
-    private void ApplyTheme()
-    {
+        _isLightTaskbar = isLight;
         if (_source?.RootVisual is TaskbarOverlay view)
         {
-            view.ApplyTheme(IsLight);
+            view.ApplyTheme(isLight);
         }
     }
 
