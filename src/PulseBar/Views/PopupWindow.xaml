@@ -87,7 +87,7 @@
                             <TextBlock Text="Settings" FontSize="12" HorizontalAlignment="Center" />
                         </StackPanel>
                     </TabItem.Header>
-                    <pages:SettingsPage />
+                    <pages:SettingsPage x:Name="SettingsTab" />
                 </TabItem>
             </TabControl>
         </Grid>

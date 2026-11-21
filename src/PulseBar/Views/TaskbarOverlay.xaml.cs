@@ -1,10 +1,13 @@
+using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using PulseBar.Models;
 
 namespace PulseBar.Views;
 
 /// <summary>
-/// Taskbar এর উপর 2x2 লেখা: CPU, GPU, RAM, GPU temp। শুধু চেহারা; কোথায় বসবে তা
+/// Taskbar এর উপর লেখা: Balanced এ 2x2 (CPU, GPU, RAM, GPU temp), Compact এ CPU + RAM এক সারিতে।
+/// শুধু চেহারা; কোথায় বসবে তা
 /// TaskbarOverlayHost ঠিক করে।
 /// </summary>
 public partial class TaskbarOverlay : UserControl
@@ -25,7 +28,14 @@ public partial class TaskbarOverlay : UserControl
         Height = DesignHeight;
     }
 
-    /// <summary>Dark taskbar এ সাদা লেখা, Light এ কালো।</summary>
+    public void ApplyLayout(OverlayLayout layout)
+    {
+        bool compact = layout == OverlayLayout.Compact;
+        CompactGrid.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        BalancedGrid.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Dark এ সাদা লেখা, Light এ কালো।</summary>
     public void ApplyTheme(bool isLightTaskbar)
     {
         Resources["OverlayLabelBrush"] = isLightTaskbar ? LightLabel : DarkLabel;

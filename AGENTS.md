@@ -74,4 +74,4 @@ PulseBar/
 | ১৪ | Fresh PC/VM এ test, bug fix, নিজের CPU/RAM usage চেক | Stable build |
 | ১৫ | Buffer: বাকি কাজ, README, screenshot, v1.0 release | Public release |
 
-> Taskbar overlay দিন ৫ এর পরে বাড়তি যোগ হয়েছে (plan এ ছিল না)। "Show on taskbar" এখন শুধু memory তে থাকে, দিন ১২ এর settings এ save হবে।
+> Taskbar overlay দিন ৫ এর পরে বাড়তি যোগ হয়েছে (plan এ ছিল না)। "Show on taskbar" আর Compact/Balanced layout দিন ১২ থেকে settings.json এ save হয়।

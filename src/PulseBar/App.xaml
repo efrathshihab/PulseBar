@@ -7,7 +7,7 @@
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <!-- Startup এ App.xaml.cs থেকে Windows এর system theme বসানো হয় -->
+                <!-- Startup এ App.xaml.cs থেকে settings এর theme (System/Light/Dark) বসানো হয় -->
                 <ui:ThemesDictionary Theme="Dark" />
                 <ui:ControlsDictionary />
             </ResourceDictionary.MergedDictionaries>
@@ -26,6 +26,7 @@
                     <ContextMenu>
                         <MenuItem Header="Take screenshot" Click="TakeScreenshot_Click" />
                         <MenuItem Header="Show on taskbar"
+                                  Tag="ShowOnTaskbar"
                                   IsCheckable="True"
                                   IsChecked="True"
                                   Click="ShowOnTaskbar_Click" />

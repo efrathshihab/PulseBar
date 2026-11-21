@@ -29,7 +29,7 @@ public sealed class ClipboardManager : IDisposable
     public const long MaxImageFileBytes = 20L * 1024 * 1024; // save হওয়া PNG ২০ MB
     public const int ThumbnailWidth = 240;
 
-    /// <summary>এর চেয়ে পুরনো item নিজে থেকে মুছে যায়। দিন ১২ এ Settings থেকে <see cref="Retention"/> বদলানো যাবে।</summary>
+    /// <summary>এর চেয়ে পুরনো item নিজে থেকে মুছে যায়; Settings থেকে <see cref="Retention"/> বদলানো যায়।</summary>
     public static readonly TimeSpan DefaultRetention = TimeSpan.FromHours(24);
 
     private static readonly TimeSpan RetentionCheckInterval = TimeSpan.FromMinutes(10);
@@ -85,8 +85,35 @@ public sealed class ClipboardManager : IDisposable
         _storage = storage;
     }
 
-    /// <summary>এর চেয়ে পুরনো item মুছে যায়।</summary>
-    public TimeSpan Retention { get; set; } = DefaultRetention;
+    private long _retentionTicks = DefaultRetention.Ticks;
+    private volatile bool _captureEnabled = true;
+
+    /// <summary>এর চেয়ে পুরনো item মুছে যায়। কমালে সাথে সাথে পুরনোগুলো মোছা হয়। যেকোনো thread থেকে।</summary>
+    public TimeSpan Retention
+    {
+        get => TimeSpan.FromTicks(Interlocked.Read(ref _retentionTicks));
+        set
+        {
+            if (value <= TimeSpan.Zero || Interlocked.Exchange(ref _retentionTicks, value.Ticks) == value.Ticks)
+            {
+                return;
+            }
+
+            if (_worker is not null)
+            {
+                Enqueue(PurgeExpired);
+            }
+        }
+    }
+
+    /// <summary>
+    /// বন্ধ থাকলে clipboard এর নতুন কিছু history তে ধরা হয় না; পুরনো history থাকে আর copy/delete চলে।
+    /// </summary>
+    public bool IsCaptureEnabled
+    {
+        get => _captureEnabled;
+        set => _captureEnabled = value;
+    }
 
     /// <summary>
     /// History বদলালে। সাধারণত background thread থেকে আসে; Copy/Delete/Clear এ যে thread ডাকে সেখান থেকে।
@@ -187,7 +214,7 @@ public sealed class ClipboardManager : IDisposable
     {
         if (msg == WmClipboardUpdate)
         {
-            if (!_disposed)
+            if (!_disposed && _captureEnabled)
             {
                 _notifiedOwnerExe = OwnerExeNow();
                 _clipboardChanged = true;

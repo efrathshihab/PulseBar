@@ -1,0 +1,55 @@
+<UserControl x:Class="PulseBar.Views.Controls.HotKeyBox"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="http://schemas.lepo.co/wpfui/2022/xaml"
+             xmlns:vm="clr-namespace:PulseBar.ViewModels"
+             mc:Ignorable="d"
+             d:DataContext="{d:DesignInstance Type=vm:HotKeySettingViewModel}">
+    <StackPanel>
+        <!-- Click করলে key চাপার অপেক্ষা; Esc বা বাইরে click এ বাতিল -->
+        <ui:Button x:Name="Box"
+                   HorizontalAlignment="Stretch"
+                   HorizontalContentAlignment="Center"
+                   MinWidth="120"
+                   Padding="10,5"
+                   ToolTip="Click করে নতুন shortcut চাপুন"
+                   AutomationProperties.Name="Shortcut"
+                   Click="Box_Click"
+                   PreviewKeyDown="Box_PreviewKeyDown"
+                   PreviewKeyUp="Box_PreviewKeyUp"
+                   LostKeyboardFocus="Box_LostKeyboardFocus">
+            <TextBlock x:Name="BoxText"
+                       Text="{Binding DisplayText, Mode=OneWay}"
+                       FontSize="12"
+                       TextTrimming="CharacterEllipsis" />
+        </ui:Button>
+
+        <TextBlock x:Name="ErrorLabel"
+                   Margin="2,4,2,0"
+                   FontSize="11"
+                   TextWrapping="Wrap"
+                   TextAlignment="Right"
+                   Foreground="{DynamicResource SystemFillColorCriticalBrush}"
+                   Text="{Binding ErrorText, Mode=OneWay}">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding ErrorText}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <TextBlock Margin="0,3,2,0"
+                   HorizontalAlignment="Right"
+                   FontSize="11">
+            <Hyperlink Click="Default_Click"
+                       Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                       TextDecorations="None">Default</Hyperlink>
+        </TextBlock>
+    </StackPanel>
+</UserControl>

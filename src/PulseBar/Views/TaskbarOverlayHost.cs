@@ -40,6 +40,8 @@ public sealed class TaskbarOverlayHost : IDisposable
     private IntPtr _taskbar;
     private Placement? _lastPlacement;
     private bool _isLightTaskbar;
+    private bool? _lightOverride;
+    private OverlayLayout _layout = OverlayLayout.Balanced;
     private bool _enabled;
     private bool _disposed;
     private DateTime _retryAfter = DateTime.MinValue;
@@ -100,6 +102,44 @@ public sealed class TaskbarOverlayHost : IDisposable
             }
         }
     }
+
+    /// <summary>Compact (CPU + RAM) না Balanced (2x2)। UI thread থেকে।</summary>
+    public OverlayLayout Layout
+    {
+        get => _layout;
+        set
+        {
+            if (_layout == value)
+            {
+                return;
+            }
+
+            _layout = value;
+            if (_source?.RootVisual is TaskbarOverlay view)
+            {
+                view.ApplyLayout(value);
+            }
+        }
+    }
+
+    /// <summary>
+    /// App এর theme: System হলে লেখার রং taskbar এর theme অনুসরণ করে; Light/Dark হলে সেটাই। UI thread থেকে।
+    /// </summary>
+    public AppTheme Theme
+    {
+        set
+        {
+            _lightOverride = value switch
+            {
+                AppTheme.Light => true,
+                AppTheme.Dark => false,
+                _ => null,
+            };
+            ApplyTheme();
+        }
+    }
+
+    private bool IsLight => _lightOverride ?? _isLightTaskbar;
 
     public void Dispose()
     {
@@ -194,7 +234,8 @@ public sealed class TaskbarOverlayHost : IDisposable
             newSource.AddHook(OverlayHook);
 
             var view = new TaskbarOverlay { DataContext = _viewModel };
-            view.ApplyTheme(_isLightTaskbar);
+            view.ApplyTheme(IsLight);
+            view.ApplyLayout(_layout);
             view.MouseLeftButtonUp += OnOverlayMouseUp;
             newSource.RootVisual = view;
 
@@ -370,16 +411,15 @@ public sealed class TaskbarOverlayHost : IDisposable
 
     private void UpdateTheme()
     {
-        bool isLight = TaskbarInterop.IsTaskbarLight();
-        if (isLight == _isLightTaskbar)
-        {
-            return;
-        }
+        _isLightTaskbar = TaskbarInterop.IsTaskbarLight();
+        ApplyTheme();
+    }
 
-        _isLightTaskbar = isLight;
+    private void ApplyTheme()
+    {
         if (_source?.RootVisual is TaskbarOverlay view)
         {
-            view.ApplyTheme(isLight);
+            view.ApplyTheme(IsLight);
         }
     }
 

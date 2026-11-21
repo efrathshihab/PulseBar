@@ -40,9 +40,10 @@ internal sealed class SingleInstance : IDisposable
     /// প্রথম instance হলে object ফেরত দেয়। আগে থেকে কেউ চললে:
     /// <paramref name="replaceExisting"/> false হলে তাকে popup খোলার সংকেত পাঠিয়ে null ফেরত দেয়
     /// (তখন এই process বন্ধ হবে); true হলে (Debug build) তাকে Quit করতে বলে, সর্বোচ্চ ৫ সেকেন্ড
-    /// অপেক্ষা করে নিজেই প্রথম instance হয়।
+    /// অপেক্ষা করে নিজেই প্রথম instance হয়। <paramref name="activateExisting"/> false হলে (login এ
+    /// চালু হওয়া) আগেরটার popup খোলানো হয় না।
     /// </summary>
-    public static SingleInstance? TryAcquire(bool replaceExisting)
+    public static SingleInstance? TryAcquire(bool replaceExisting, bool activateExisting = true)
     {
         IntPtr descriptor = IntPtr.Zero;
         try
@@ -93,7 +94,11 @@ internal sealed class SingleInstance : IDisposable
 
                 if (!replaceExisting)
                 {
-                    SignalExisting(ShowEventName, allowForeground: true);
+                    if (activateExisting)
+                    {
+                        SignalExisting(ShowEventName, allowForeground: true);
+                    }
+
                     return null;
                 }
 
@@ -107,7 +112,11 @@ internal sealed class SingleInstance : IDisposable
                 if (stopwatch.Elapsed > ReplaceTimeout)
                 {
                     Log.Error("Previous instance did not quit within 5 s; showing its popup instead");
-                    SignalExisting(ShowEventName, allowForeground: true);
+                    if (activateExisting)
+                    {
+                        SignalExisting(ShowEventName, allowForeground: true);
+                    }
+
                     return null;
                 }
 

@@ -42,33 +42,56 @@
 
     <!-- প্রায় স্বচ্ছ background, যাতে পুরো জায়গায় click ধরা যায় -->
     <Border Background="#01000000" Padding="4,0">
-        <Grid VerticalAlignment="Center">
-            <!-- নির্দিষ্ট চওড়া, যাতে সংখ্যা বদলালে লেখা না কাঁপে -->
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="24" />
-                <ColumnDefinition Width="30" />
-                <ColumnDefinition Width="10" />
-                <ColumnDefinition Width="24" />
-                <ColumnDefinition Width="34" />
-            </Grid.ColumnDefinitions>
-            <Grid.RowDefinitions>
-                <RowDefinition Height="14" />
-                <RowDefinition Height="14" />
-            </Grid.RowDefinitions>
+        <Grid>
+            <!-- Balanced: 2x2। নির্দিষ্ট চওড়া, যাতে সংখ্যা বদলালে লেখা না কাঁপে -->
+            <Grid x:Name="BalancedGrid" VerticalAlignment="Center">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="30" />
+                    <ColumnDefinition Width="10" />
+                    <ColumnDefinition Width="24" />
+                    <ColumnDefinition Width="34" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="14" />
+                    <RowDefinition Height="14" />
+                </Grid.RowDefinitions>
 
-            <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="CPU" />
-            <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource OverlayValue}"
-                       Text="{Binding CpuText, Mode=OneWay}" Tag="{Binding CpuLevel, Mode=OneWay}" />
-            <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
-            <TextBlock Grid.Row="0" Grid.Column="4" Style="{StaticResource OverlayValue}"
-                       Text="{Binding GpuText, Mode=OneWay}" Tag="{Binding GpuLevel, Mode=OneWay}" />
+                <TextBlock Grid.Row="0" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="CPU" />
+                <TextBlock Grid.Row="0" Grid.Column="1" Style="{StaticResource OverlayValue}"
+                           Text="{Binding CpuText, Mode=OneWay}" Tag="{Binding CpuLevel, Mode=OneWay}" />
+                <TextBlock Grid.Row="0" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
+                <TextBlock Grid.Row="0" Grid.Column="4" Style="{StaticResource OverlayValue}"
+                           Text="{Binding GpuText, Mode=OneWay}" Tag="{Binding GpuLevel, Mode=OneWay}" />
 
-            <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="RAM" />
-            <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource OverlayValue}"
-                       Text="{Binding RamText, Mode=OneWay}" Tag="{Binding RamLevel, Mode=OneWay}" />
-            <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
-            <TextBlock Grid.Row="1" Grid.Column="4" Style="{StaticResource OverlayValue}"
-                       Text="{Binding GpuTempText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
+                <TextBlock Grid.Row="1" Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="RAM" />
+                <TextBlock Grid.Row="1" Grid.Column="1" Style="{StaticResource OverlayValue}"
+                           Text="{Binding RamText, Mode=OneWay}" Tag="{Binding RamLevel, Mode=OneWay}" />
+                <TextBlock Grid.Row="1" Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="GPU" />
+                <TextBlock Grid.Row="1" Grid.Column="4" Style="{StaticResource OverlayValue}"
+                           Text="{Binding GpuTempText, Mode=OneWay}" Tag="{Binding GpuTempLevel, Mode=OneWay}" />
+            </Grid>
+
+            <!-- Compact: CPU + RAM, এক সারিতে একটু বড় লেখা; চওড়া Balanced এর সমান -->
+            <Grid x:Name="CompactGrid"
+                  VerticalAlignment="Center"
+                  Visibility="Collapsed"
+                  TextElement.FontSize="12">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="26" />
+                    <ColumnDefinition Width="30" />
+                    <ColumnDefinition Width="8" />
+                    <ColumnDefinition Width="28" />
+                    <ColumnDefinition Width="30" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock Grid.Column="0" Style="{StaticResource OverlayLabel}" Text="CPU" />
+                <TextBlock Grid.Column="1" Style="{StaticResource OverlayValue}"
+                           Text="{Binding CpuText, Mode=OneWay}" Tag="{Binding CpuLevel, Mode=OneWay}" />
+                <TextBlock Grid.Column="3" Style="{StaticResource OverlayLabel}" Text="RAM" />
+                <TextBlock Grid.Column="4" Style="{StaticResource OverlayValue}"
+                           Text="{Binding RamText, Mode=OneWay}" Tag="{Binding RamLevel, Mode=OneWay}" />
+            </Grid>
         </Grid>
     </Border>
 </UserControl>
